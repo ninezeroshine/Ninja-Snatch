@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Iframe Snatcher",
+  "version": "1.0",
+  "description": "Вытаскивает чистый HTML из iframe/srcdoc в один клик.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
