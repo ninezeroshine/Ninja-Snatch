@@ -18,13 +18,18 @@
         }
 
         init() {
-            document.body.appendChild(this.overlay);
-            document.addEventListener('mousemove', this.boundMouseMove, true);
-            document.addEventListener('scroll', () => this.updatePosition(), true);
-            document.addEventListener('click', this.boundClick, true);
-            document.addEventListener('keydown', this.boundKeyDown, true);
-            document.body.style.cursor = 'crosshair';
-            window.snatcherInstance = this;
+            try {
+                document.body.appendChild(this.overlay);
+                document.addEventListener('mousemove', this.boundMouseMove, true);
+                document.addEventListener('scroll', () => this.updatePosition(), true);
+                document.addEventListener('click', this.boundClick, true);
+                document.addEventListener('keydown', this.boundKeyDown, true);
+                document.body.style.cursor = 'crosshair';
+                window.snatcherInstance = this;
+            } catch (err) {
+                this.showToast('Ошибка инициализации: ' + err.message, 'error');
+                console.error('[Snatcher] Init error:', err);
+            }
         }
 
         onMouseMove(e) {
@@ -38,19 +43,24 @@
         updatePosition() {
             if (!this.hoveredElement) return;
 
-            const rect = this.hoveredElement.getBoundingClientRect();
+            try {
+                const rect = this.hoveredElement.getBoundingClientRect();
 
-            // Используем координаты относительно документа для корректного отображения при скролле
-            const top = rect.top + window.pageYOffset;
-            const left = rect.left + window.pageXOffset;
+                const top = rect.top + window.pageYOffset;
+                const left = rect.left + window.pageXOffset;
 
-            this.overlay.style.width = `${rect.width}px`;
-            this.overlay.style.height = `${rect.height}px`;
-            this.overlay.style.top = `${top}px`;
-            this.overlay.style.left = `${left}px`;
-            this.overlay.style.display = 'block';
+                this.overlay.style.width = `${rect.width}px`;
+                this.overlay.style.height = `${rect.height}px`;
+                this.overlay.style.top = `${top}px`;
+                this.overlay.style.left = `${left}px`;
+                this.overlay.style.display = 'block';
 
-            this.label.textContent = `${this.hoveredElement.tagName.toLowerCase()}${this.hoveredElement.id ? '#' + this.hoveredElement.id : ''}`;
+                const tagName = this.hoveredElement.tagName.toLowerCase();
+                const id = this.hoveredElement.id ? '#' + this.hoveredElement.id : '';
+                this.label.textContent = `${tagName}${id}`;
+            } catch (err) {
+                console.error('[Snatcher] Position update error:', err);
+            }
         }
 
         onKeyDown(e) {
@@ -69,32 +79,97 @@
         }
 
         async snatch(el) {
-            const mode = window.snatcherMode || 'copy';
-            let html = el.outerHTML;
+            const outputMode = window.snatcherMode || 'copy';
+            const extractMode = window.snatcherExtractMode || 'clean';
+            const useStyles = extractMode === 'styled';
 
-            const fullDoc = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n</head>\n<body>\n${html}\n</body>\n</html>`;
+            try {
+                let html;
+                let fullDoc;
 
-            if (mode === 'copy') {
-                const textToCopy = html; // Копируем только кусок HTML для сниппетов
-                try {
-                    await navigator.clipboard.writeText(textToCopy);
-                    this.showToast("Код скопирован в буфер! 📋");
-                } catch (err) {
-                    console.error("Copy failed", err);
+                // Используем StyleInjector если выбран режим со стилями
+                if (useStyles && window.StyleInjector) {
+                    html = window.StyleInjector.injectStyles(el);
+                    fullDoc = window.StyleInjector.createStyledDocument(el, `Snatched: ${el.tagName}`);
+                } else {
+                    // Raw HTML - форматируем если prettifier доступен
+                    const rawHTML = el.outerHTML;
+                    const rawDoc = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>Snatched: ${el.tagName}</title>\n</head>\n<body>\n${rawHTML}\n</body>\n</html>`;
+
+                    if (window.StyleInjector?.prettifyHTML) {
+                        html = window.StyleInjector.prettifyHTML(rawHTML);
+                        fullDoc = window.StyleInjector.prettifyHTML(rawDoc);
+                    } else {
+                        html = rawHTML;
+                        fullDoc = rawDoc;
+                    }
                 }
-            } else {
-                const title = (el.tagName + '_' + (el.id || el.className || 'element')).substring(0, 30);
-                this.download(fullDoc, `${title.replace(/[^a-z0-9]/gi, '_')}.html`);
+
+                if (outputMode === 'copy') {
+                    await navigator.clipboard.writeText(html);
+                    const msg = useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋';
+                    this.showToast(msg, 'success');
+                } else {
+                    // Используем background script для скачивания
+                    const title = (el.tagName + '_' + (el.id || el.className || 'element')).substring(0, 30);
+                    const styleSuffix = useStyles ? '_styled' : '';
+                    const filename = title.replace(/[^a-z0-9]/gi, '_') + styleSuffix + '.html';
+
+                    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+                        chrome.runtime.sendMessage({
+                            action: 'download',
+                            data: { content: fullDoc, filename }
+                        }, (response) => {
+                            if (response && response.success) {
+                                const msg = useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾';
+                                this.showToast(msg, 'success');
+                            } else {
+                                // Fallback к прямому скачиванию
+                                this.downloadFallback(fullDoc, filename);
+                            }
+                        });
+                    } else {
+                        // Fallback если chrome.runtime недоступен
+                        this.downloadFallback(fullDoc, filename);
+                    }
+                }
+            } catch (err) {
+                console.error('[Snatcher] Snatch error:', err);
+                this.showToast('Ошибка: ' + err.message, 'error');
             }
         }
 
-        showToast(message) {
+        /**
+         * Fallback-метод скачивания через Blob URL
+         */
+        downloadFallback(content, filename) {
+            try {
+                const blob = new Blob([content], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('Файл сохранён! 💾', 'success');
+            } catch (err) {
+                this.showToast('Ошибка скачивания: ' + err.message, 'error');
+            }
+        }
+
+        showToast(message, type = 'success') {
             const toast = document.createElement('div');
             toast.className = 'snatcher-toast';
-            toast.innerHTML = `<span>✅</span> ${message}`;
+
+            const icon = type === 'success' ? '✅' : '❌';
+            const bgColor = type === 'success' ? '#10b981' : '#ef4444';
+
+            toast.innerHTML = `<span>${icon}</span> ${message}`;
+            toast.style.background = bgColor;
             document.body.appendChild(toast);
 
-            // Показываем с задержкой для инициализации анимации
             requestAnimationFrame(() => {
                 toast.classList.add('show');
             });
@@ -105,27 +180,24 @@
             }, 2500);
         }
 
-        download(content, filename) {
-            const blob = new Blob([content], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-
         destroy() {
-            document.removeEventListener('mousemove', this.boundMouseMove, true);
-            document.removeEventListener('click', this.boundClick, true);
-            document.removeEventListener('keydown', this.boundKeyDown, true);
-            this.overlay.remove();
-            document.body.style.cursor = '';
-            window.snatcherInstance = null;
+            try {
+                document.removeEventListener('mousemove', this.boundMouseMove, true);
+                document.removeEventListener('click', this.boundClick, true);
+                document.removeEventListener('keydown', this.boundKeyDown, true);
+                this.overlay.remove();
+                document.body.style.cursor = '';
+                window.snatcherInstance = null;
+            } catch (err) {
+                console.error('[Snatcher] Destroy error:', err);
+            }
         }
     }
 
-    new SniperSelector();
+    // Глобальный error handler
+    try {
+        new SniperSelector();
+    } catch (err) {
+        console.error('[Snatcher] Failed to initialize:', err);
+    }
 })();

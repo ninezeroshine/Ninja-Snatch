@@ -1,103 +1,115 @@
 const status = document.getElementById("status");
 const modeBtns = document.querySelectorAll('.mode-btn');
-let currentMode = 'copy';
+const extractModeRadios = document.querySelectorAll('input[name="extractMode"]');
 
-// 1. Инициализация режима из хранилища
-chrome.storage.local.get(['snackMode'], (result) => {
-  if (result.snackMode) {
-    currentMode = result.snackMode;
-    updateModeUI();
+let outputMode = 'copy'; // copy или download
+let extractMode = 'clean'; // clean или styled
+
+// 1. Инициализация из хранилища
+chrome.storage.local.get(['outputMode', 'extractMode'], (result) => {
+  if (result.outputMode) {
+    outputMode = result.outputMode;
+    updateOutputModeUI();
+  }
+  if (result.extractMode) {
+    extractMode = result.extractMode;
+    updateExtractModeUI();
   }
 });
 
-// 2. Переключатель режимов
+// 2. Переключатель режима вывода (копировать/скачать)
 modeBtns.forEach(btn => {
   btn.addEventListener('click', () => {
-    currentMode = btn.dataset.mode;
-    chrome.storage.local.set({ snackMode: currentMode });
-    updateModeUI();
+    outputMode = btn.dataset.mode;
+    chrome.storage.local.set({ outputMode });
+    updateOutputModeUI();
   });
 });
 
-function updateModeUI() {
+// 3. Переключатель режима извлечения (чистый/со стилями)
+extractModeRadios.forEach(radio => {
+  radio.addEventListener('change', () => {
+    extractMode = radio.value;
+    chrome.storage.local.set({ extractMode });
+  });
+});
+
+function updateOutputModeUI() {
   modeBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === currentMode);
+    btn.classList.toggle('active', btn.dataset.mode === outputMode);
   });
 }
 
-// 3. Основная логика извлечения
-async function startSnatch(type) {
+function updateExtractModeUI() {
+  extractModeRadios.forEach(radio => {
+    radio.checked = radio.value === extractMode;
+  });
+}
+
+// ============================================
+// СЕКЦИЯ 1: IFRAME (aura.build)
+// ============================================
+document.getElementById("stealIframeBtn").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  // Проверка на служебные страницы Chrome
-  if (tab.url.startsWith('chrome://') || tab.url.startsWith('https://chrome.google.com/webstore')) {
-    showError("На этой странице расширение не работает");
+  if (isRestrictedPage(tab.url)) {
+    showError("На этой странице не работает");
     return;
   }
 
-  status.textContent = "Работаем... 🥷";
-  status.style.color = "#94a3b8";
+  showStatus("Ищем iframe...");
 
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: snatchData
+      func: extractIframeContent
     });
 
-    if (!results || !results[0] || !results[0].result) {
+    if (!results?.[0]?.result) {
       throw new Error("Не удалось получить данные");
     }
 
-    const data = results[0].result;
-    const targetContent = (type === 'content') ? (data.iframeHTML || data.mainHTML) : data.mainHTML;
+    const { html, title, found } = results[0].result;
 
-    if (currentMode === 'copy') {
-      try {
-        await navigator.clipboard.writeText(targetContent);
-        status.textContent = "Код скопирован! 📋";
-      } catch (err) {
-        throw new Error("Ошибка буфера обмена");
-      }
-    } else {
-      const sanitize = (str) => str.replace(/[^a-z0-9а-яё]/gi, '_').substring(0, 30) || "site";
-      const title = sanitize(data.title);
-      const suffix = type === 'content' ? 'content' : 'full';
-
-      const blob = new Blob([targetContent], { type: "text/html" });
-      const reader = new FileReader();
-      reader.onload = () => {
-        chrome.downloads.download({
-          url: reader.result,
-          filename: `${title}_${suffix}.html`,
-          saveAs: false
-        });
-      };
-      reader.readAsDataURL(blob);
-      status.textContent = "Файл сохранен! 💾";
+    if (!found) {
+      showError("iframe не найден");
+      return;
     }
 
-    setTimeout(() => { if (status.textContent !== "") status.textContent = ""; }, 3000);
+    await handleOutput(html, title, 'iframe');
   } catch (err) {
     showError(err.message);
   }
-}
+});
 
-function showError(msg) {
-  status.textContent = "Ошибка: " + msg;
-  status.style.color = "#f87171";
-}
+// ============================================
+// СЕКЦИЯ 2: ЛЮБОЙ САЙТ
+// ============================================
 
-// 4. Слушатели кнопок
+// Visual Sniper
 document.getElementById("visualSelectBtn").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+  if (isRestrictedPage(tab.url)) {
+    showError("На этой странице не работает");
+    return;
+  }
+
   try {
     await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['selector.css'] });
+
+    // Инжектируем styleInjector для prettify и стилей
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['styleInjector.js'] });
+
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: (mode) => { window.snatcherMode = mode; },
-      args: [currentMode]
+      func: (mode, extract) => {
+        window.snatcherMode = mode;
+        window.snatcherExtractMode = extract;
+      },
+      args: [outputMode, extractMode]
     });
+
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['selector.js'] });
     window.close();
   } catch (err) {
@@ -105,28 +117,158 @@ document.getElementById("visualSelectBtn").addEventListener("click", async () =>
   }
 });
 
-document.getElementById("stealContentBtn").addEventListener("click", () => startSnatch('content'));
-document.getElementById("stealMainBtn").addEventListener("click", () => startSnatch('main'));
+// Вся страница
+document.getElementById("stealPageBtn").addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-// 5. Функция-инжектор (выполняется на странице)
-function snatchData() {
+  if (isRestrictedPage(tab.url)) {
+    showError("На этой странице не работает");
+    return;
+  }
+
+  showStatus("Извлекаем страницу...");
+
+  try {
+    // Инжектируем styleInjector для prettify и стилей
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['styleInjector.js']
+    });
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractPageContent,
+      args: [extractMode]
+    });
+
+    if (!results?.[0]?.result) {
+      throw new Error("Не удалось получить данные");
+    }
+
+    const { html, title } = results[0].result;
+    await handleOutput(html, title, 'page');
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+// ============================================
+// ОБЩИЕ ФУНКЦИИ
+// ============================================
+
+function isRestrictedPage(url) {
+  return url.startsWith('chrome://') ||
+    url.startsWith('https://chrome.google.com/webstore') ||
+    url.startsWith('edge://');
+}
+
+async function handleOutput(content, title, suffix) {
+  const sanitizedTitle = title.replace(/[^a-z0-9а-яё]/gi, '_').substring(0, 30) || 'snatched';
+  const styleSuffix = extractMode === 'styled' ? '_styled' : '';
+  const filename = `${sanitizedTitle}_${suffix}${styleSuffix}.html`;
+
+  if (outputMode === 'copy') {
+    try {
+      await navigator.clipboard.writeText(content);
+      const msg = extractMode === 'styled' ? "Со стилями скопировано! 🎨" : "Скопировано! 📋";
+      showSuccess(msg);
+    } catch (err) {
+      showError("Ошибка буфера обмена");
+    }
+  } else {
+    chrome.runtime.sendMessage({
+      action: 'download',
+      data: { content, filename }
+    }, (response) => {
+      if (response?.success) {
+        const msg = extractMode === 'styled' ? "Файл со стилями сохранён! 🎨" : "Файл сохранён! 💾";
+        showSuccess(msg);
+      } else {
+        showError(response?.error || "Ошибка скачивания");
+      }
+    });
+  }
+}
+
+function showStatus(msg) {
+  status.textContent = msg;
+  status.style.color = "#94a3b8";
+}
+
+function showSuccess(msg) {
+  status.textContent = msg;
+  status.style.color = "#10b981";
+  setTimeout(() => { status.textContent = ""; }, 3000);
+}
+
+function showError(msg) {
+  status.textContent = "Ошибка: " + msg;
+  status.style.color = "#f87171";
+}
+
+// ============================================
+// ФУНКЦИИ-ИНЖЕКТОРЫ (выполняются на странице)
+// ============================================
+
+function extractIframeContent() {
   function getFullHTML(doc) {
-    const doctype = doc.doctype ?
-      new XMLSerializer().serializeToString(doc.doctype) :
-      "<!DOCTYPE html>";
+    const doctype = doc.doctype
+      ? new XMLSerializer().serializeToString(doc.doctype)
+      : "<!DOCTYPE html>";
     return doctype + "\n" + doc.documentElement.outerHTML;
   }
 
   const iframes = Array.from(document.querySelectorAll('iframe'));
-  const targetIframe = iframes.find(i => i.srcdoc) || iframes.find(i => {
-    try { return i.contentDocument && i.contentDocument.documentElement; }
+
+  // Приоритет: srcdoc iframe
+  const srcdocIframe = iframes.find(i => i.srcdoc);
+  if (srcdocIframe) {
+    return {
+      html: srcdocIframe.srcdoc,
+      title: document.title,
+      found: true
+    };
+  }
+
+  // Fallback: same-origin iframe с контентом
+  const accessibleIframe = iframes.find(i => {
+    try { return i.contentDocument?.documentElement; }
     catch (e) { return false; }
   });
 
+  if (accessibleIframe) {
+    return {
+      html: getFullHTML(accessibleIframe.contentDocument),
+      title: document.title,
+      found: true
+    };
+  }
+
+  return { html: null, title: null, found: false };
+}
+
+function extractPageContent(mode) {
+  function getFullHTML(doc) {
+    const doctype = doc.doctype
+      ? new XMLSerializer().serializeToString(doc.doctype)
+      : "<!DOCTYPE html>";
+    return doctype + "\n" + doc.documentElement.outerHTML;
+  }
+
+  let html;
+
+  if (mode === 'styled' && window.StyleInjector) {
+    html = window.StyleInjector.createStyledDocument(document.documentElement, document.title);
+  } else {
+    // Raw HTML - тоже форматируем if prettifier available
+    const rawHTML = getFullHTML(document);
+    html = window.StyleInjector?.prettifyHTML
+      ? window.StyleInjector.prettifyHTML(rawHTML)
+      : rawHTML;
+  }
+
   return {
-    mainHTML: getFullHTML(document),
-    iframeHTML: targetIframe ? (targetIframe.srcdoc || getFullHTML(targetIframe.contentDocument)) : null,
+    html,
     title: document.title
   };
 }
-
