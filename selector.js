@@ -82,17 +82,22 @@
             const outputMode = window.snatcherMode || 'copy';
             const extractMode = window.snatcherExtractMode || 'clean';
             const useStyles = extractMode === 'styled';
+            const useLLM = extractMode === 'llm';
 
             try {
                 let html;
                 let fullDoc;
 
-                // Используем StyleInjector если выбран режим со стилями
-                if (useStyles && window.StyleInjector) {
+                if (useLLM && window.StyleInjector) {
+                    // LLM mode - compact, clean output for AI
+                    html = window.StyleInjector.createLLMExport(el);
+                    fullDoc = html; // Same content for download
+                } else if (useStyles && window.StyleInjector) {
+                    // Styled mode - full CSS included
                     html = window.StyleInjector.injectStyles(el);
                     fullDoc = window.StyleInjector.createStyledDocument(el, `Snatched: ${el.tagName}`);
                 } else {
-                    // Raw HTML - форматируем если prettifier доступен
+                    // Clean mode - raw HTML
                     const rawHTML = el.outerHTML;
                     const rawDoc = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>Snatched: ${el.tagName}</title>\n</head>\n<body>\n${rawHTML}\n</body>\n</html>`;
 
@@ -107,13 +112,13 @@
 
                 if (outputMode === 'copy') {
                     await navigator.clipboard.writeText(html);
-                    const msg = useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋';
+                    const msg = useLLM ? 'Код для LLM скопирован! 🤖' : (useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋');
                     this.showToast(msg, 'success');
                 } else {
                     // Используем background script для скачивания
                     const title = (el.tagName + '_' + (el.id || el.className || 'element')).substring(0, 30);
-                    const styleSuffix = useStyles ? '_styled' : '';
-                    const filename = title.replace(/[^a-z0-9]/gi, '_') + styleSuffix + '.html';
+                    const modeSuffix = useLLM ? '_llm' : (useStyles ? '_styled' : '');
+                    const filename = title.replace(/[^a-z0-9]/gi, '_') + modeSuffix + '.html';
 
                     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
                         chrome.runtime.sendMessage({
@@ -121,7 +126,7 @@
                             data: { content: fullDoc, filename }
                         }, (response) => {
                             if (response && response.success) {
-                                const msg = useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾';
+                                const msg = useLLM ? 'LLM файл сохранён! 🤖' : (useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾');
                                 this.showToast(msg, 'success');
                             } else {
                                 // Fallback к прямому скачиванию

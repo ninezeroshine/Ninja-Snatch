@@ -98,7 +98,8 @@ document.getElementById("visualSelectBtn").addEventListener("click", async () =>
   try {
     await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['selector.css'] });
 
-    // Инжектируем styleInjector для prettify и стилей
+    // Инжектируем config.js и styleInjector для prettify и стилей
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['config.js'] });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['styleInjector.js'] });
 
     await chrome.scripting.executeScript({
@@ -129,7 +130,11 @@ document.getElementById("stealPageBtn").addEventListener("click", async () => {
   showStatus("Извлекаем страницу...");
 
   try {
-    // Инжектируем styleInjector для prettify и стилей
+    // Инжектируем config.js и styleInjector для prettify и стилей
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['config.js']
+    });
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ['styleInjector.js']

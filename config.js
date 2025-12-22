@@ -1,6 +1,12 @@
 /**
- * Ninja-Snatch Configuration v1.2
+ * Ninja-Snatch Configuration v9.0
  * Centralized settings and platform patterns
+ * 
+ * This file contains all configurable patterns for:
+ * - External CSS detection
+ * - Script preservation/removal
+ * - Browser extension cleanup
+ * - Data attribute handling
  */
 
 // Guard against multiple injections
@@ -8,7 +14,7 @@ if (typeof window.SnatcherConfig === 'undefined') {
 
     const SnatcherConfig = {
         /** Version */
-        VERSION: '8.0',
+        VERSION: '9.0',
 
         /** Debug mode - enables verbose logging */
         DEBUG: false,
@@ -18,10 +24,19 @@ if (typeof window.SnatcherConfig === 'undefined') {
          * Used in collectExternalLinks()
          */
         externalCSSPatterns: [
+            // Website Builders
             'website-files.com',   // Webflow
             'webflow.com',         // Webflow CDN
             'framer.com',          // Framer
+            'squarespace.com',     // Squarespace
+            'wix.com',             // Wix
+            'shopify.com',         // Shopify
+            'cargo.site',          // Cargo
+            // CDNs
             'assets.',             // Various CDNs
+            'cdn.',                // Generic CDN prefix
+            'static.',             // Static assets
+            // Generic
             '.css'                 // Any CSS file
         ],
 
@@ -30,8 +45,8 @@ if (typeof window.SnatcherConfig === 'undefined') {
          * Used in cleanHTML()
          */
         preserveScriptPatterns: [
+            // Animation Libraries
             'webflow',
-            'jquery',
             'gsap',
             'framer',
             'motion',
@@ -39,26 +54,58 @@ if (typeof window.SnatcherConfig === 'undefined') {
             'lottie',
             'scroll',
             'animation',
-            'w-',        // Webflow widgets
+            'locomotive',          // Locomotive Scroll
+            'aos',                 // Animate On Scroll
+            'swiper',              // Swiper.js
+            'splide',              // Splide.js
+            'glide',               // Glide.js
+            'barba',               // Barba.js (page transitions)
+            // Core Libraries
+            'jquery',
+            // Platform-specific
+            'w-',                  // Webflow widgets
             'Webflow'
         ],
 
         /**
-         * Scripts to remove (analytics, extensions)
+         * Scripts to remove (analytics, tracking, extensions)
          * Used in cleanHTML()
          */
         removeScriptPatterns: [
+            // Browser Extensions
             'chrome-extension://',
+            'moz-extension://',
+            // Google
             'analytics',
             'gtag',
             'gtm',
             'google-analytics',
+            'googletagmanager',
+            // Social/Ads
             'facebook',
+            'fbevents',
             'pixel',
+            'twitter',
+            'linkedin',
+            'tiktok',
+            // Analytics Platforms
             'hotjar',
+            'mixpanel',
+            'segment',
+            'amplitude',
+            'heap',
+            'fullstory',
+            'clarity',             // Microsoft Clarity
+            'mouseflow',
+            'luckyorange',
+            'crazyegg',
+            // Customer Support
             'crisp',
             'intercom',
-            'zendesk'
+            'zendesk',
+            'hubspot',
+            'drift',
+            'freshdesk'
         ],
 
         /**
@@ -66,16 +113,25 @@ if (typeof window.SnatcherConfig === 'undefined') {
          * Used in cleanHTML()
          */
         extensionSelectors: [
+            // Ad blockers
             '[id="moat-moat"]',
             '[class^="float-moat"]',
+            // Grammar checkers
             '[id*="grammarly"]',
             '[class*="grammarly"]',
             '[data-grammarly-shadow-root]',
             'grammarly-extension',
+            // Password managers
             '[id*="lastpass"]',
             '[data-dashlane]',
+            '[id*="1password"]',
+            '[class*="bitwarden"]',
+            '[data-protonpass]',
+            // Framework artifacts
             'next-route-announcer',
-            '[src^="chrome-extension://"]'
+            // Generic extension elements
+            '[src^="chrome-extension://"]',
+            '[src^="moz-extension://"]'
         ],
 
         /**
@@ -106,21 +162,52 @@ if (typeof window.SnatcherConfig === 'undefined') {
         cleanupPatterns: {
             /** Data attributes to remove (prefix match) */
             removeDataPrefixes: [
+                // Framework internals
                 'data-framer-',      // Framer internal
                 'data-radix-',       // Radix UI
+                'data-headlessui-',  // Headless UI
                 'data-testid',       // Testing
+                'data-cy',           // Cypress testing
+                'data-test-',        // Generic testing
+                // Analytics/Tracking
                 'data-sentry-',      // Sentry
                 'data-gtm-',         // Google Tag Manager
-                'data-ga-'           // Google Analytics
+                'data-ga-',          // Google Analytics
+                'data-analytics-',   // Generic analytics
+                // React/Vue/Next internals
+                'data-react-',       // React internals
+                'data-v-',           // Vue scoped styles
+                'data-next-'         // Next.js internals
             ],
 
-            /** Data attributes to KEEP (even if matched above) */
+            /** Data attributes to KEEP (animation/functionality related) */
             keepDataAttributes: [
+                // Webflow
                 'data-w-id',         // Webflow animations
+                'data-wf-',          // Webflow general
+                // Animation libraries
                 'data-animation',    // Generic animations
-                'data-scroll',       // Scroll triggers
+                'data-aos',          // Animate On Scroll
+                'data-aos-delay',
+                'data-aos-duration',
+                'data-scroll',       // Locomotive/generic scroll
+                'data-scroll-speed',
+                'data-speed',        // Parallax speed
+                'data-delay',        // Animation delay
+                // Counters
+                'data-target',       // Counter target value
+                'data-count',        // Count animation
+                'data-value',        // Value for animations
+                'data-end',          // End value
+                'data-number',       // Number display
+                // Images
                 'data-src',          // Lazy loading
-                'data-srcset'        // Responsive images
+                'data-srcset',       // Responsive images
+                'data-sizes',        // Image sizes
+                // Sliders
+                'data-swiper-',      // Swiper.js
+                'data-splide-',      // Splide.js
+                'data-slide-'        // Generic sliders
             ],
 
             /** Attributes to remove if empty */

@@ -41,13 +41,17 @@ if (typeof window.StyleInjector !== 'undefined') {
             EXPO_OUT: [0.16, 1, 0.3, 1]
         };
 
+        // Load patterns from SnatcherConfig if available, otherwise use defaults
+        const getConfig = () => window.SnatcherConfig || {};
+        const cfg = getConfig();
+
         const PATTERNS = {
-            externalCSS: ['website-files.com', 'webflow.com', 'framer.com', 'assets.', '.css'],
-            preserveScripts: ['webflow', 'jquery', 'gsap', 'framer', 'motion', 'anime', 'lottie', 'scroll', 'animation', 'w-', 'Webflow'],
-            removeScripts: ['chrome-extension://', 'analytics', 'gtag', 'gtm', 'google-analytics', 'facebook', 'pixel', 'hotjar', 'crisp', 'intercom', 'zendesk'],
-            extensionSelectors: ['[id="moat-moat"]', '[class^="float-moat"]', '[id*="grammarly"]', '[class*="grammarly"]', '[data-grammarly-shadow-root]', 'grammarly-extension', '[id*="lastpass"]', '[data-dashlane]', 'next-route-announcer', '[src^="chrome-extension://"]'],
-            removeDataPrefixes: ['data-framer-', 'data-radix-', 'data-testid', 'data-sentry-', 'data-gtm-', 'data-ga-'],
-            keepDataAttributes: ['data-w-id', 'data-animation', 'data-scroll', 'data-src', 'data-srcset']
+            externalCSS: cfg.externalCSSPatterns || ['website-files.com', 'webflow.com', 'framer.com', 'assets.', '.css'],
+            preserveScripts: cfg.preserveScriptPatterns || ['webflow', 'jquery', 'gsap', 'framer', 'motion', 'anime', 'lottie', 'scroll', 'animation', 'w-', 'Webflow'],
+            removeScripts: cfg.removeScriptPatterns || ['chrome-extension://', 'analytics', 'gtag', 'gtm', 'google-analytics', 'facebook', 'pixel', 'hotjar', 'crisp', 'intercom', 'zendesk'],
+            extensionSelectors: cfg.extensionSelectors || ['[id="moat-moat"]', '[class^="float-moat"]', '[id*="grammarly"]', '[class*="grammarly"]', '[data-grammarly-shadow-root]', 'grammarly-extension', '[id*="lastpass"]', '[data-dashlane]', 'next-route-announcer', '[src^="chrome-extension://"]'],
+            removeDataPrefixes: cfg.cleanupPatterns?.removeDataPrefixes || ['data-framer-', 'data-radix-', 'data-testid', 'data-sentry-', 'data-gtm-', 'data-ga-'],
+            keepDataAttributes: cfg.cleanupPatterns?.keepDataAttributes || ['data-w-id', 'data-animation', 'data-scroll', 'data-src', 'data-srcset']
         };
 
         // ═══════════════════════════════════════════════════════════════
@@ -98,6 +102,7 @@ if (typeof window.StyleInjector !== 'undefined') {
             allCSSRules = [];
             cssVariables = new Map();
 
+            // Collect from document stylesheets
             for (const sheet of document.styleSheets) {
                 try {
                     const rules = sheet.cssRules || sheet.rules;
@@ -107,6 +112,61 @@ if (typeof window.StyleInjector !== 'undefined') {
                     if (sheet.href) externalStylesheets.push(sheet.href);
                 }
             }
+
+            // Collect from Shadow DOM
+            collectShadowCSS(document.body);
+        };
+
+        /**
+         * Recursively collect CSS from Shadow DOM elements
+         * Handles open shadow roots only (closed roots are inaccessible by design)
+         */
+        const collectShadowCSS = (element) => {
+            if (!element) return;
+
+            const traverse = (el) => {
+                if (!el) return;
+
+                if (el.shadowRoot) {
+                    _log('info', `Collecting CSS from shadow root in <${el.tagName.toLowerCase()}>`);
+
+                    // Collect <style> tags inside shadow root
+                    el.shadowRoot.querySelectorAll('style').forEach(style => {
+                        try {
+                            if (style.sheet?.cssRules) {
+                                for (const rule of style.sheet.cssRules) {
+                                    processRule(rule);
+                                }
+                            }
+                        } catch (e) {
+                            _log('warn', `Could not access shadow style: ${e.message}`);
+                        }
+                    });
+
+                    // Collect adopted stylesheets if available (modern browsers)
+                    if (el.shadowRoot.adoptedStyleSheets) {
+                        for (const sheet of el.shadowRoot.adoptedStyleSheets) {
+                            try {
+                                for (const rule of sheet.cssRules) {
+                                    processRule(rule);
+                                }
+                            } catch (e) {
+                                _log('warn', `Could not access adopted stylesheet: ${e.message}`);
+                            }
+                        }
+                    }
+
+                    // Recurse into shadow root
+                    el.shadowRoot.querySelectorAll('*').forEach(traverse);
+                }
+
+                // Traverse regular children
+                for (const child of el.children) {
+                    traverse(child);
+                }
+            };
+
+            traverse(element);
         };
 
         const processRule = (rule) => {
@@ -315,40 +375,106 @@ if (typeof window.StyleInjector !== 'undefined') {
             return classes;
         };
 
-        const getMatchedCSSRules = (usedClasses, element) => {
-            const selectors = new Set();
-            const collect = (el) => {
-                selectors.add(el.tagName.toLowerCase());
-                if (el.classList) el.classList.forEach(c => selectors.add(`.${c}`));
-                if (el.id) selectors.add(`#${el.id}`);
-            };
-            collect(element);
-            element.querySelectorAll('*').forEach(collect);
+        /**
+         * Get all elements in the subtree (including the root)
+         * Recursively traverses Shadow DOM for web components
+         */
+        const getAllElements = (element) => {
+            const elements = [];
 
-            const matched = [], seen = new Set();
+            const traverse = (el) => {
+                if (!el) return;
+                elements.push(el);
+
+                // Traverse Shadow DOM if accessible (open mode only)
+                if (el.shadowRoot) {
+                    _log('info', `Found shadow root in <${el.tagName.toLowerCase()}>`);
+                    el.shadowRoot.querySelectorAll('*').forEach(shadowEl => traverse(shadowEl));
+                }
+
+                // Traverse regular children
+                for (const child of el.children) {
+                    traverse(child);
+                }
+            };
+
+            traverse(element);
+            return elements;
+        };
+
+        /**
+         * Check if a selector matches any element using native element.matches()
+         * Handles pseudo-selectors and invalid selectors gracefully
+         */
+        const selectorMatchesAny = (selector, elements) => {
+            // Extract base selector (remove pseudo-elements and pseudo-classes for matching)
+            // e.g., ".btn:hover::before" -> ".btn"
+            const baseSelector = selector
+                .replace(/::[\w-]+/g, '')           // Remove pseudo-elements (::before, ::after)
+                .replace(/:(?:hover|focus|active|visited|focus-visible|focus-within|disabled|checked|first-child|last-child|nth-child\([^)]*\)|nth-of-type\([^)]*\))/g, '') // Remove state pseudo-classes
+                .trim();
+
+            if (!baseSelector) return false;
+
+            try {
+                for (const el of elements) {
+                    if (el.matches && el.matches(baseSelector)) {
+                        return true;
+                    }
+                }
+            } catch (e) {
+                // Invalid selector - fall back to class-based matching
+                _log('warn', `Invalid selector: ${selector}`);
+                return false;
+            }
+            return false;
+        };
+
+        /**
+         * NEW: Native element.matches() based CSS matching
+         * This provides precise matching and eliminates CSS bloat
+         */
+        const getMatchedCSSRules = (usedClasses, element) => {
+            const elements = getAllElements(element);
+            const matched = [];
+            const seen = new Set();
 
             for (const rule of allCSSRules) {
                 const sel = rule.selector;
                 if (seen.has(sel)) continue;
 
-                let matches = sel.startsWith('@media') || sel === '*' || sel === 'html' || sel === 'body';
-                if (!matches) {
-                    for (const s of selectors) {
-                        if (sel.includes(s.replace('.', '').replace('#', ''))) { matches = true; break; }
-                    }
-                }
-                if (!matches) {
-                    for (const c of usedClasses) {
-                        if (sel.includes(c)) { matches = true; break; }
+                let matches = false;
+
+                // Always include these universal rules
+                if (sel.startsWith('@media')) {
+                    // For media queries, check if any inner selector matches
+                    matches = true;
+                } else if (sel === '*' || sel === 'html' || sel === 'body' || sel === ':root') {
+                    matches = true;
+                } else {
+                    // Use native element.matches() for precise matching
+                    // Split compound selectors (e.g., ".a, .b" -> [".a", ".b"])
+                    const selectorParts = sel.split(',').map(s => s.trim());
+
+                    for (const part of selectorParts) {
+                        if (selectorMatchesAny(part, elements)) {
+                            matches = true;
+                            break;
+                        }
                     }
                 }
 
                 if (matches) {
                     seen.add(sel);
-                    matched.push(sel.startsWith('@media') ? `${sel} {\n${rule.cssText}\n}` : `${sel} { ${rule.cssText} }`);
+                    matched.push(
+                        sel.startsWith('@media')
+                            ? `${sel} {\n${rule.cssText}\n}`
+                            : `${sel} { ${rule.cssText} }`
+                    );
                 }
             }
 
+            _log('info', `Matched ${matched.length} CSS rules out of ${allCSSRules.length} total`);
             return matched.join('\n');
         };
 
@@ -479,20 +605,60 @@ img { opacity: 1 !important; }
         const generateCursorScript = () => `
 // UNIVERSAL Custom Cursor Fix
 (function() {
-  const cursorSelectors = ['[class*="z-[9999]"]','[class*="z-[999]"]','[class*="cursor"]','[class*="Cursor"]','.custom-cursor','.cursor-dot','.cursor-outline','.cursor-follower','.mouse-follower'];
+  // More specific selectors - avoid matching cursor-pointer, cursor-default etc.
+  const cursorSelectors = [
+    '.custom-cursor',
+    '.cursor-dot',
+    '.cursor-outline', 
+    '.cursor-follower',
+    '.mouse-follower',
+    '.cursor-ball',
+    '.cursor-circle',
+    '[data-cursor]',
+    '[data-cursor-follower]'
+  ];
+  
   let cursors = [];
-  for (const sel of cursorSelectors) { try { document.querySelectorAll(sel).forEach(el => { if (!cursors.includes(el)) cursors.push(el); }); } catch(e) {} }
-  // Structural detection fallback
+  
+  // Try specific selectors first
+  for (const sel of cursorSelectors) { 
+    try { 
+      document.querySelectorAll(sel).forEach(el => { 
+        if (!cursors.includes(el)) cursors.push(el); 
+      }); 
+    } catch(e) {} 
+  }
+  
+  // Structural detection fallback - very strict criteria
   if (!cursors.length) {
     document.querySelectorAll('*').forEach(el => {
       const s = getComputedStyle(el);
-      if (s.position === 'fixed' && s.pointerEvents === 'none' && el.offsetWidth < 100 && el.offsetHeight < 100 && parseInt(s.zIndex) > 9000) cursors.push(el);
+      const zIndex = parseInt(s.zIndex) || 0;
+      // Must be: fixed, pointer-events none, small, high z-index, no text content
+      if (
+        s.position === 'fixed' && 
+        s.pointerEvents === 'none' && 
+        el.offsetWidth < 80 && 
+        el.offsetHeight < 80 &&
+        el.offsetWidth > 5 &&
+        el.offsetHeight > 5 &&
+        zIndex > 9000 &&
+        el.textContent.trim().length === 0 &&
+        !el.querySelector('button, a, input, [role="button"]')
+      ) {
+        cursors.push(el);
+      }
     });
   }
+  
   if (!cursors.length) return;
+  
   let mx = 0, my = 0;
   document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
-  (function tick() { cursors.forEach(c => c.style.transform = 'translate(' + mx + 'px, ' + my + 'px) translate(-50%, -50%)'); requestAnimationFrame(tick); })();
+  (function tick() { 
+    cursors.forEach(c => c.style.transform = 'translate(' + mx + 'px, ' + my + 'px) translate(-50%, -50%)'); 
+    requestAnimationFrame(tick); 
+  })();
   console.log('[Snatch] Cursor activated (' + cursors.length + ' elements)');
 })();
 `;
@@ -500,6 +666,61 @@ img { opacity: 1 !important; }
         // ═══════════════════════════════════════════════════════════════
         // PUBLIC API
         // ═══════════════════════════════════════════════════════════════
+
+        /**
+         * Clone shadow DOM content into regular HTML
+         * Since shadow DOM cannot be serialized directly, we extract its content
+         * and insert it as regular HTML with a wrapper
+         */
+        const cloneShadowContent = (clone, original) => {
+            const processElement = (clonedEl, originalEl) => {
+                if (!originalEl || !clonedEl) return;
+
+                if (originalEl.shadowRoot) {
+                    _log('info', `Cloning shadow content from <${originalEl.tagName.toLowerCase()}>`);
+
+                    // Create container for shadow content
+                    const shadowContainer = document.createElement('div');
+                    shadowContainer.className = 'snatch-shadow-content';
+                    shadowContainer.setAttribute('data-snatch-shadow', 'true');
+
+                    // Copy shadow root innerHTML
+                    shadowContainer.innerHTML = originalEl.shadowRoot.innerHTML;
+
+                    // Apply shadow styles as inline or scoped
+                    originalEl.shadowRoot.querySelectorAll('style').forEach(style => {
+                        const styleClone = style.cloneNode(true);
+                        shadowContainer.insertBefore(styleClone, shadowContainer.firstChild);
+                    });
+
+                    // Append to cloned element
+                    clonedEl.appendChild(shadowContainer);
+
+                    // Recursively process nested shadow roots in the container
+                    const shadowChildren = originalEl.shadowRoot.children;
+                    const containerChildren = shadowContainer.children;
+
+                    for (let i = 0; i < shadowChildren.length; i++) {
+                        if (shadowChildren[i].shadowRoot && containerChildren[i]) {
+                            processElement(containerChildren[i], shadowChildren[i]);
+                        }
+                    }
+                }
+
+                // Process regular children
+                const origChildren = originalEl.children;
+                const cloneChildren = clonedEl.children;
+
+                for (let i = 0; i < origChildren.length; i++) {
+                    if (cloneChildren[i]) {
+                        processElement(cloneChildren[i], origChildren[i]);
+                    }
+                }
+            };
+
+            processElement(clone, original);
+            return clone;
+        };
 
         return {
             version: VERSION,
@@ -512,6 +733,10 @@ img { opacity: 1 !important; }
 
             _prepareExport(element) {
                 let clone = element.cloneNode(true);
+
+                // Clone shadow DOM content into regular HTML
+                clone = cloneShadowContent(clone, element);
+
                 clone = cleanHTML(clone);
                 clone = cleanupAttributes(clone);
                 clone = fixAnimationStates(clone);
@@ -581,10 +806,205 @@ ${generateCursorScript()}
 </html>`);
             },
 
+            /**
+             * Create LLM-friendly ULTRA-compact export
+             * Strips ALL styling, keeps only structure and content
+             */
+            createLLMExport(element) {
+                // Clone element
+                let clone = element.cloneNode(true);
+                clone = cleanHTML(clone);
+
+                // Get element path for context
+                const getPath = (el) => {
+                    const parts = [];
+                    let current = el;
+                    for (let i = 0; i < 3 && current && current !== document.body; i++) {
+                        let part = current.tagName.toLowerCase();
+                        if (current.id) part += '#' + current.id;
+                        else if (current.classList.length) {
+                            // Keep only semantic class (first one that's not a utility)
+                            const semantic = Array.from(current.classList).find(c =>
+                                !c.includes('-') && !c.match(/^[a-z]{1,3}:/) && c.length > 2
+                            );
+                            if (semantic) part += '.' + semantic;
+                        }
+                        parts.unshift(part);
+                        current = current.parentElement;
+                    }
+                    return parts.join(' > ');
+                };
+
+                const elementPath = getPath(element);
+                const hostname = window.location.hostname;
+
+                // BALANCED: Remove only noise classes, keep styling classes
+                const noisePatterns = [
+                    /^transition/,      // transition-all, transition-colors
+                    /^duration-/,       // duration-300
+                    /^ease-/,           // ease-in-out
+                    /^delay-/,          // delay-100
+                    /^animate-/,        // animate-spin, animate-on-scroll
+                    /^hover:/,          // hover:bg-white
+                    /^focus:/,          // focus:ring
+                    /^active:/,         // active:scale
+                    /^group-hover:/,    // group-hover:text-white
+                    /^group$/,          // group
+                    /^peer/,            // peer, peer-focus
+                    /^motion-/,         // motion-safe
+                    /^will-change/,     // will-change-transform
+                    /^cursor-/,         // cursor-pointer
+                    /^select-/,         // select-none
+                    /^pointer-events/,  // pointer-events-none
+                    /^outline-/,        // outline-none
+                    /^ring-/,           // ring-2
+                    /^sr-only/,         // screen reader only
+                    /^scroll-/,         // scroll-smooth
+                    /^snap-/,           // scroll snap
+                    /^touch-/,          // touch-manipulation
+                    /^whitespace-/,     // whitespace-nowrap (structural, not visual)
+                ];
+
+                // Clean CSS module hashes: _className_abc123 → className
+                const cleanCSSModuleHash = (cls) => {
+                    // Pattern: starts with _ or __, has _hash at the end
+                    // Examples: _metadataGrid_payqq_223, __button_x7f2k_45
+                    const match = cls.match(/^_+(.+?)_[a-z0-9]{4,}_\d+$/i);
+                    if (match) {
+                        return match[1]; // Return just the readable part
+                    }
+                    // Also handle: className_abc123 or className-abc123 (hash at end)
+                    const hashMatch = cls.match(/^(.+?)[-_][a-z0-9]{5,}$/i);
+                    if (hashMatch && hashMatch[1].length > 2) {
+                        return hashMatch[1];
+                    }
+                    return cls;
+                };
+
+                clone.querySelectorAll('[class]').forEach(el => {
+                    let classes = Array.from(el.classList)
+                        .filter(cls => !noisePatterns.some(pattern => pattern.test(cls)))
+                        .map(cleanCSSModuleHash);
+
+                    // Remove duplicates after cleaning
+                    classes = [...new Set(classes)];
+
+                    if (classes.length === 0) {
+                        el.removeAttribute('class');
+                    } else {
+                        // Limit to max 5 most important classes per element
+                        el.className = classes.slice(0, 5).join(' ');
+                    }
+                });
+
+                // Same for root
+                if (clone.classList) {
+                    let rootClasses = Array.from(clone.classList)
+                        .filter(cls => !noisePatterns.some(pattern => pattern.test(cls)))
+                        .map(cleanCSSModuleHash);
+                    rootClasses = [...new Set(rootClasses)];
+                    clone.className = rootClasses.slice(0, 5).join(' ');
+                }
+
+                // Remove inline styles EXCEPT key visual ones
+                clone.querySelectorAll('[style]').forEach(el => {
+                    const style = el.getAttribute('style');
+                    // Keep only essential visual styles
+                    const keepStyles = ['color', 'background', 'font-size', 'padding', 'margin', 'border', 'width', 'height', 'display', 'flex', 'grid', 'gap'];
+                    const newStyles = [];
+
+                    style.split(';').forEach(rule => {
+                        const prop = rule.split(':')[0]?.trim().toLowerCase();
+                        if (prop && keepStyles.some(k => prop.includes(k))) {
+                            newStyles.push(rule.trim());
+                        }
+                    });
+
+                    if (newStyles.length > 0) {
+                        el.setAttribute('style', newStyles.join('; '));
+                    } else {
+                        el.removeAttribute('style');
+                    }
+                });
+
+                // Remove data attributes (noise for LLM)
+                clone.querySelectorAll('*').forEach(el => {
+                    Array.from(el.attributes).forEach(attr => {
+                        if (attr.name.startsWith('data-')) {
+                            el.removeAttribute(attr.name);
+                        }
+                    });
+                });
+
+                // Deduplicate repeated children (marquee pattern)
+                const deduplicateChildren = (parent) => {
+                    const children = Array.from(parent.children);
+                    if (children.length < 4) return;
+
+                    // Check if children are repeating
+                    const half = Math.floor(children.length / 2);
+                    let isRepeating = true;
+
+                    for (let i = 0; i < Math.min(half, 5); i++) {
+                        if (children[i]?.textContent?.trim() !== children[i + half]?.textContent?.trim()) {
+                            isRepeating = false;
+                            break;
+                        }
+                    }
+
+                    if (isRepeating && half > 1) {
+                        // Keep only first half + add comment
+                        for (let i = children.length - 1; i >= half; i--) {
+                            children[i].remove();
+                        }
+                        const comment = document.createComment(` ... repeats ${half} more items`);
+                        parent.appendChild(comment);
+                    }
+                };
+
+                // Apply deduplication to all containers
+                clone.querySelectorAll('*').forEach(el => {
+                    if (el.children.length > 6) {
+                        deduplicateChildren(el);
+                    }
+                });
+
+                // Simplify nested structure - unwrap single-child divs
+                let changed = true;
+                while (changed) {
+                    changed = false;
+                    clone.querySelectorAll('div').forEach(div => {
+                        if (div.children.length === 1 &&
+                            div.children[0].tagName === 'DIV' &&
+                            !div.textContent.trim().replace(div.children[0].textContent.trim(), '')) {
+                            div.replaceWith(div.children[0]);
+                            changed = true;
+                        }
+                    });
+                }
+
+                // Build minimal output
+                const context = `<!-- ${hostname} > ${elementPath} -->`;
+
+                // Simple formatting (no heavy prettify)
+                let html = clone.outerHTML
+                    .replace(/>\s+</g, '>\n<')
+                    .replace(/></g, '>\n<');
+
+                // Limit line length for readability
+                const lines = html.split('\n').map(line => {
+                    if (line.length > 100) {
+                        return line.substring(0, 97) + '...';
+                    }
+                    return line;
+                });
+
+                return `${context}\n${lines.join('\n')}`;
+            },
+
             // Legacy compatibility - functions
             collectAllCSS,
             collectUsedClasses,
-            getMatchedCSSRules,
             collectExternalLinks,
             collectGoogleFonts,
             generateCSSVariables,
