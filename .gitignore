@@ -5,6 +5,3 @@ dist/
 build/
 .env
 .agent/
-*.html
-!popup.html
-!index.html
