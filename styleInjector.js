@@ -1,818 +1,619 @@
 /**
- * Ninja-Snatch Style Injector v7.6
- * + External CSS: Webflow CDN, Framer stylesheets
- * + Improved matching: tags, IDs, data-*, universal selectors
+ * Ninja-Snatch Browser Bundle v9.0
+ * 
+ * Self-contained IIFE for browser extension compatibility.
+ * This is used by popup.js and selector.js which run as content scripts.
+ * 
+ * For the refactored modular version, use src/index.js
+ * This file bridges the old API with the new modular architecture.
  */
 
 // Guard against multiple injections
 if (typeof window.StyleInjector !== 'undefined') {
-    console.log('StyleInjector already loaded, skipping...');
+    console.log('[Snatch] StyleInjector already loaded, skipping...');
 } else {
 
-    const StyleInjector = {
-        classCounter: 0,
-        allKeyframes: [],
-        allFontFaces: [],
-        allCSSRules: [],
-        cssVariables: new Map(),
-        externalStylesheets: [],
-        pageOrigin: '',
+    /**
+     * Browser-compatible StyleInjector
+     * This is a bundled version that doesn't require ES module support
+     */
+    const StyleInjector = (() => {
+        // ═══════════════════════════════════════════════════════════════
+        // CONFIG
+        // ═══════════════════════════════════════════════════════════════
 
-        /**
-         * Инициализация
-         */
-        init() {
-            this.pageOrigin = window.location.origin;
-            this.allKeyframes = [];
-            this.allFontFaces = [];
-            this.allCSSRules = [];
-            this.cssVariables = new Map();
-            this.externalStylesheets = [];
-            this.classCounter = 0;
+        const VERSION = '9.0.0';
 
-            this.collectAllCSS();
-        },
+        const DEFAULTS = {
+            debug: false,
+            defaultTitle: 'Snatched Content',
+            motionDevCdn: 'https://cdn.jsdelivr.net/npm/motion@11.13.5/+esm',
+            tailwindCdn: 'https://cdn.tailwindcss.com',
+            durations: {
+                reveal: 600,
+                transform: 700,
+                counter: 2000,
+                marquee: 25000
+            }
+        };
 
-        /**
-         * Собирает ВСЕ CSS со страницы
-         */
-        collectAllCSS() {
-            // Inline стили
-            document.querySelectorAll('style').forEach(style => {
-                try {
-                    if (style.sheet?.cssRules) {
-                        for (const rule of style.sheet.cssRules) {
-                            this.processRule(rule);
-                        }
-                    }
-                } catch (e) { }
-            });
+        const EASING = {
+            EXPO_OUT: [0.16, 1, 0.3, 1]
+        };
 
-            // Внешние таблицы стилей
+        const PATTERNS = {
+            externalCSS: ['website-files.com', 'webflow.com', 'framer.com', 'assets.', '.css'],
+            preserveScripts: ['webflow', 'jquery', 'gsap', 'framer', 'motion', 'anime', 'lottie', 'scroll', 'animation', 'w-', 'Webflow'],
+            removeScripts: ['chrome-extension://', 'analytics', 'gtag', 'gtm', 'google-analytics', 'facebook', 'pixel', 'hotjar', 'crisp', 'intercom', 'zendesk'],
+            extensionSelectors: ['[id="moat-moat"]', '[class^="float-moat"]', '[id*="grammarly"]', '[class*="grammarly"]', '[data-grammarly-shadow-root]', 'grammarly-extension', '[id*="lastpass"]', '[data-dashlane]', 'next-route-announcer', '[src^="chrome-extension://"]'],
+            removeDataPrefixes: ['data-framer-', 'data-radix-', 'data-testid', 'data-sentry-', 'data-gtm-', 'data-ga-'],
+            keepDataAttributes: ['data-w-id', 'data-animation', 'data-scroll', 'data-src', 'data-srcset']
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // STATE
+        // ═══════════════════════════════════════════════════════════════
+
+        let allKeyframes = [];
+        let allFontFaces = [];
+        let allCSSRules = [];
+        let cssVariables = new Map();
+        let externalStylesheets = [];
+        let pageOrigin = '';
+
+        // ═══════════════════════════════════════════════════════════════
+        // UTILS
+        // ═══════════════════════════════════════════════════════════════
+
+        const _log = (level, ...args) => {
+            const debug = window.SnatcherConfig?.DEBUG ?? DEFAULTS.debug;
+            if (!debug && level !== 'error') return;
+            console[level === 'error' ? 'error' : 'log'](`[Snatch ${level.toUpperCase()}]`, ...args);
+        };
+
+        const matchesAny = (str, patterns) => {
+            if (!str) return false;
+            const lower = str.toLowerCase();
+            return patterns.some(p => lower.includes(p.toLowerCase()));
+        };
+
+        const fixRelativeURL = (url, origin) => {
+            if (!url || url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            return url.startsWith('/') ? origin + url : origin + '/' + url;
+        };
+
+        const fixCSSUrls = (cssText, origin) => {
+            if (!cssText || !origin) return cssText;
+            return cssText.replace(/url\(['"]?(?!data:|https?:|\/\/|blob:)([^'")]+)['"]?\)/gi,
+                (match, url) => `url("${fixRelativeURL(url, origin)}")`);
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // CSS COLLECTION
+        // ═══════════════════════════════════════════════════════════════
+
+        const collectAllCSS = () => {
+            allKeyframes = [];
+            allFontFaces = [];
+            allCSSRules = [];
+            cssVariables = new Map();
+
             for (const sheet of document.styleSheets) {
                 try {
                     const rules = sheet.cssRules || sheet.rules;
                     if (!rules) continue;
-                    for (const rule of rules) {
-                        this.processRule(rule);
-                    }
+                    for (const rule of rules) processRule(rule);
                 } catch (e) {
-                    // Cross-origin — сохраняем ссылку для включения в экспорт
-                    if (sheet.href) {
-                        this.externalStylesheets.push(sheet.href);
-                    }
+                    if (sheet.href) externalStylesheets.push(sheet.href);
                 }
             }
-        },
+        };
 
-        /**
-         * Собирает внешние стили (link tags)
-         */
-        collectExternalLinks() {
-            const links = [];
-            document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
-                const href = link.getAttribute('href');
-                if (href && (
-                    href.includes('website-files.com') ||    // Webflow
-                    href.includes('webflow.com') ||           // Webflow
-                    href.includes('framer.com') ||            // Framer
-                    href.includes('assets.') ||               // Various CDNs
-                    href.startsWith('/') ||                   // Relative URLs
-                    href.includes('.css')                     // Any CSS file
-                )) {
-                    // Конвертируем относительные в абсолютные
-                    let absoluteHref = href;
-                    if (href.startsWith('/') && !href.startsWith('//')) {
-                        absoluteHref = this.pageOrigin + href;
-                    }
-                    links.push(`<link rel="stylesheet" href="${absoluteHref}">`);
-                }
-            });
-            return [...new Set(links)].join('\n');
-        },
-
-        /**
-         * Обрабатывает CSS правило
-         */
-        processRule(rule) {
+        const processRule = (rule) => {
             if (!rule) return;
 
-            // Keyframes
-            if (rule.type === CSSRule.KEYFRAMES_RULE) {
-                this.allKeyframes.push(rule.cssText);
-                return;
-            }
-
-            // Font-face — фиксим относительные URL
-            if (rule.type === CSSRule.FONT_FACE_RULE) {
-                let cssText = rule.cssText;
-                // Конвертируем относительные URL в абсолютные
-                cssText = this.fixRelativeURLs(cssText);
-                this.allFontFaces.push(cssText);
-                return;
-            }
-
-            // Style rules
             if (rule.type === CSSRule.STYLE_RULE) {
-                this.allCSSRules.push({
-                    selector: rule.selectorText,
-                    cssText: rule.cssText
-                });
+                allCSSRules.push({ selector: rule.selectorText, cssText: fixCSSUrls(rule.style.cssText, pageOrigin) });
 
-                // CSS переменные
-                if (rule.selectorText === ':root' || rule.selectorText === 'html') {
+                if (rule.selectorText === ':root') {
                     for (let i = 0; i < rule.style.length; i++) {
                         const prop = rule.style[i];
-                        if (prop.startsWith('--')) {
-                            this.cssVariables.set(prop, rule.style.getPropertyValue(prop));
-                        }
+                        if (prop.startsWith('--')) cssVariables.set(prop, rule.style.getPropertyValue(prop));
                     }
                 }
-                return;
-            }
-
-            // Media queries — рекурсивно
-            if (rule.type === CSSRule.MEDIA_RULE) {
-                for (const innerRule of rule.cssRules) {
-                    this.processRule(innerRule);
+            } else if (rule.type === CSSRule.KEYFRAMES_RULE) {
+                allKeyframes.push(rule.cssText);
+            } else if (rule.type === CSSRule.FONT_FACE_RULE) {
+                allFontFaces.push(fixCSSUrls(rule.cssText, pageOrigin));
+            } else if (rule.type === CSSRule.MEDIA_RULE) {
+                const mediaRules = [];
+                for (const inner of rule.cssRules) {
+                    if (inner.type === CSSRule.STYLE_RULE) {
+                        mediaRules.push(`  ${inner.selectorText} { ${inner.style.cssText} }`);
+                    }
+                }
+                if (mediaRules.length) {
+                    allCSSRules.push({ selector: `@media ${rule.conditionText}`, cssText: mediaRules.join('\n') });
+                }
+            } else if (rule.type === CSSRule.IMPORT_RULE && rule.styleSheet) {
+                try {
+                    for (const r of rule.styleSheet.cssRules) processRule(r);
+                } catch (e) {
+                    if (rule.href) externalStylesheets.push(rule.href);
                 }
             }
-        },
+        };
 
-        /**
-         * Фиксит относительные URL на абсолютные
-         */
-        fixRelativeURLs(cssText) {
-            return cssText.replace(/url\(["']?(\.\.\/[^"')]+|\.\/[^"')]+)["']?\)/g, (match, path) => {
-                try {
-                    const absoluteUrl = new URL(path, this.pageOrigin).href;
-                    return `url("${absoluteUrl}")`;
-                } catch {
-                    return match;
-                }
-            });
-        },
+        const collectExternalLinks = () => {
+            return Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+                .filter(l => {
+                    const href = l.getAttribute('href') || l.href;
+                    return href && PATTERNS.externalCSS.some(p => href.toLowerCase().includes(p));
+                })
+                .map(l => {
+                    const href = l.getAttribute('href') || l.href;
+                    const resolvedHref = fixRelativeURL(href, pageOrigin);
+                    return `<link rel="stylesheet" href="${resolvedHref}">`;
+                })
+                .join('\n');
+        };
 
-        /**
-         * Очищает клон от browser extensions (БЕЗОПАСНО)
-         */
-        cleanHTML(clone) {
-            // Удаляем только очевидные расширения по специфичным селекторам
-            const extensionSelectors = [
-                '[id="moat-moat"]',           // Drawbridge/Moat
-                '[class^="float-moat"]',
-                '[id*="grammarly"]',          // Grammarly
-                '[class*="grammarly"]',
-                '[data-grammarly-shadow-root]',
-                'grammarly-extension',
-                '[id*="lastpass"]',           // LastPass  
-                '[data-dashlane]',            // Dashlane
-                'next-route-announcer',       // Next.js internal
-                '[src^="chrome-extension://"]'
-            ];
+        const collectGoogleFonts = () => {
+            return Array.from(document.querySelectorAll('link[href*="fonts.googleapis.com"]'))
+                .map(l => `@import url('${l.href}');`)
+                .join('\n');
+        };
 
-            extensionSelectors.forEach(selector => {
-                try {
-                    clone.querySelectorAll(selector).forEach(el => el.remove());
-                } catch (e) { }
-            });
+        const generateCSSVariables = () => {
+            if (cssVariables.size === 0) return '';
+            const vars = Array.from(cssVariables.entries()).map(([n, v]) => `  ${n}: ${v};`).join('\n');
+            return `:root {\n${vars}\n}`;
+        };
 
-            // ВАЖНО: Сохраняем скрипты анимаций (Webflow, GSAP, Framer Motion)
-            // Удаляем только скрипты расширений и аналитики
+        // ═══════════════════════════════════════════════════════════════
+        // HTML PROCESSING
+        // ═══════════════════════════════════════════════════════════════
+
+        const cleanHTML = (clone) => {
+            // Remove extension elements
+            for (const sel of PATTERNS.extensionSelectors) {
+                try { clone.querySelectorAll(sel).forEach(el => el.remove()); } catch (e) { }
+            }
+
+            // Process scripts
             clone.querySelectorAll('script').forEach(script => {
-                const src = script.getAttribute('src') || '';
-                const content = script.textContent || '';
-
-                // Скрипты, которые нужно СОХРАНИТЬ для анимаций
-                const keepPatterns = [
-                    'webflow',
-                    'jquery',
-                    'gsap',
-                    'framer',
-                    'motion',
-                    'anime',
-                    'lottie',
-                    'scroll',
-                    'animation',
-                    'w-', // Webflow widgets
-                    'Webflow'
-                ];
-
-                // Скрипты, которые УДАЛЯЕМ (аналитика, расширения)
-                const removePatterns = [
-                    'chrome-extension://',
-                    'analytics',
-                    'gtag',
-                    'gtm',
-                    'google-analytics',
-                    'facebook',
-                    'pixel',
-                    'hotjar',
-                    'crisp',
-                    'intercom',
-                    'zendesk'
-                ];
-
-                // Проверяем нужно ли сохранить
-                const shouldKeep = keepPatterns.some(pattern =>
-                    src.toLowerCase().includes(pattern) ||
-                    content.toLowerCase().includes(pattern)
-                );
-
-                // Проверяем нужно ли удалить
-                const shouldRemove = removePatterns.some(pattern =>
-                    src.toLowerCase().includes(pattern)
-                );
-
-                // Удаляем только если явно нужно удалить И не нужно сохранять
-                if (shouldRemove && !shouldKeep) {
+                const combined = (script.src || '') + ' ' + (script.textContent || '');
+                if (matchesAny(combined, PATTERNS.removeScripts)) {
                     script.remove();
+                } else if (!matchesAny(combined, PATTERNS.preserveScripts)) {
+                    if (combined.includes('gtag') || combined.includes('analytics') || combined.includes('fbq')) {
+                        script.remove();
+                    }
                 }
             });
+
+            // Remove tracking
+            clone.querySelectorAll('img[src*="pixel"], img[src*="tracking"], noscript').forEach(el => el.remove());
+            clone.querySelectorAll('iframe[src=""], iframe:not([src])').forEach(el => el.remove());
 
             return clone;
-        },
+        };
 
-        /**
-         * Исправляет состояния анимаций — сбрасывает начальные состояния JS-анимаций
-         * Делает элементы видимыми без JavaScript
-         */
-        fixAnimationStates(clone) {
-            // Паттерны inline-стилей, которые скрывают элементы (начальные состояния анимаций)
-            clone.querySelectorAll('[style]').forEach(el => {
+        const fixAnimationStates = (clone) => {
+            const process = (el) => {
                 const style = el.getAttribute('style');
                 if (!style) return;
-
-                // Пропускаем если это display:none (это не анимация, это скрытый элемент)
-                if (/display\s*:\s*none/i.test(style)) return;
-
-                let fixed = style;
-
-                // УДАЛЯЕМ opacity полностью если оно низкое (< 0.5) — это начальные состояния анимаций
-                // Матчим: opacity: 0, opacity: 0.1, opacity: 0.0674 и т.д.
-                const opacityMatch = fixed.match(/opacity\s*:\s*([\d.]+)/i);
-                if (opacityMatch) {
-                    const opacityValue = parseFloat(opacityMatch[1]);
-                    if (opacityValue < 0.5) {
-                        // Удаляем opacity полностью, чтобы CSS анимации работали
-                        fixed = fixed.replace(/opacity\s*:\s*[\d.]+\s*(;|$)/gi, '$1');
-                    }
+                let newStyle = style.replace(/will-change\s*:[^;]+(;|$)/gi, '').replace(/transform-style\s*:\s*preserve-3d\s*(;|$)/gi, '');
+                newStyle = newStyle.replace(/;\s*;/g, ';').replace(/^\s*;\s*/, '').trim();
+                if (newStyle !== style) {
+                    newStyle ? el.setAttribute('style', newStyle) : el.removeAttribute('style');
                 }
+            };
+            process(clone);
+            clone.querySelectorAll('[style]').forEach(process);
+            return clone;
+        };
 
-                // УДАЛЯЕМ transform с translate полностью (чтобы CSS анимации работали!)
-                fixed = fixed.replace(/transform\s*:\s*translate3d\([^)]+\)[^;]*(;|$)/gi, '$1');
-                fixed = fixed.replace(/transform\s*:\s*translateY\([^)]+\)[^;]*(;|$)/gi, '$1');
-                fixed = fixed.replace(/transform\s*:\s*translateX\([^)]+\)[^;]*(;|$)/gi, '$1');
+        const fixHTMLUrls = (clone) => {
+            clone.querySelectorAll('[src]').forEach(el => {
+                const src = el.getAttribute('src');
+                if (src && !src.startsWith('data:') && !src.startsWith('http') && !src.startsWith('//')) {
+                    el.setAttribute('src', fixRelativeURL(src, pageOrigin));
+                }
+            });
 
-                // Убираем will-change (оптимизация для JS-анимаций, не нужна в статике)
-                fixed = fixed.replace(/will-change\s*:[^;]+(;|$)/gi, '$1');
+            clone.querySelectorAll('[href]').forEach(el => {
+                const href = el.getAttribute('href');
+                if (href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('tel:') && !href.startsWith('http') && !href.startsWith('//')) {
+                    el.setAttribute('href', fixRelativeURL(href, pageOrigin));
+                }
+            });
 
-                // Убираем transform-style: preserve-3d (не нужен без transform)
-                fixed = fixed.replace(/transform-style\s*:\s*preserve-3d\s*(;|$)/gi, '$1');
-
-                // Чистим лишние точки с запятой и пробелы
-                fixed = fixed.replace(/;\s*;+/g, ';').replace(/^\s*;+\s*/g, '').replace(/\s*;+\s*$/g, '').trim();
-
-                if (fixed !== style) {
-                    if (fixed) {
-                        el.setAttribute('style', fixed);
-                    } else {
-                        el.removeAttribute('style');
-                    }
+            clone.querySelectorAll('[srcset]').forEach(el => {
+                const srcset = el.getAttribute('srcset');
+                if (srcset) {
+                    const fixed = srcset.split(',').map(part => {
+                        const [url, desc] = part.trim().split(/\s+/);
+                        return desc ? `${fixRelativeURL(url, pageOrigin)} ${desc}` : fixRelativeURL(url, pageOrigin);
+                    }).join(', ');
+                    el.setAttribute('srcset', fixed);
                 }
             });
 
             return clone;
-        },
+        };
 
-        /**
-         * Фиксит URL в HTML атрибутах (src, href, srcset)
-         */
-        fixHTMLUrls(clone) {
-            const urlAttributes = ['src', 'href', 'srcset', 'data-src', 'poster'];
-
+        const cleanupAttributes = (clone) => {
             clone.querySelectorAll('*').forEach(el => {
-                urlAttributes.forEach(attr => {
-                    const value = el.getAttribute(attr);
-                    if (!value) return;
-
-                    // Пропускаем data: URL и абсолютные URL
-                    if (value.startsWith('data:') || value.startsWith('http://') ||
-                        value.startsWith('https://') || value.startsWith('//')) {
-                        return;
-                    }
-
-                    // Фиксим /_next/ и другие относительные пути
-                    if (value.startsWith('/')) {
-                        try {
-                            const absoluteUrl = new URL(value, this.pageOrigin).href;
-
-                            // Для srcset нужна особая обработка
-                            if (attr === 'srcset') {
-                                const fixed = value.split(',').map(part => {
-                                    const [url, size] = part.trim().split(/\s+/);
-                                    if (url.startsWith('/')) {
-                                        return new URL(url, this.pageOrigin).href + (size ? ' ' + size : '');
-                                    }
-                                    return part;
-                                }).join(', ');
-                                el.setAttribute(attr, fixed);
-                            } else {
-                                el.setAttribute(attr, absoluteUrl);
-                            }
-                        } catch (e) { }
+                Array.from(el.attributes).forEach(attr => {
+                    if (PATTERNS.keepDataAttributes.includes(attr.name)) return;
+                    for (const prefix of PATTERNS.removeDataPrefixes) {
+                        if (attr.name.startsWith(prefix)) {
+                            el.removeAttribute(attr.name);
+                            break;
+                        }
                     }
                 });
-            });
 
-            // Фиксим inline стили с url()
-            clone.querySelectorAll('[style]').forEach(el => {
-                const style = el.getAttribute('style');
-                if (style && style.includes('url(')) {
-                    const fixed = style.replace(/url\(["']?([^"')]+)["']?\)/g, (match, path) => {
-                        if (path.startsWith('/') && !path.startsWith('//')) {
-                            try {
-                                return `url("${new URL(path, this.pageOrigin).href}")`;
-                            } catch (e) { }
-                        }
-                        return match;
-                    });
-                    el.setAttribute('style', fixed);
-                }
+                ['class', 'style', 'id'].forEach(a => {
+                    const v = el.getAttribute(a);
+                    if (v !== null && v.trim() === '') el.removeAttribute(a);
+                });
             });
-
             return clone;
-        },
+        };
 
-        /**
-         * Форматирует HTML для читаемости
-         */
-        prettifyHTML(html) {
-            // Теги, которые не нужно разбивать
-            const inlineTags = ['a', 'span', 'strong', 'em', 'b', 'i', 'u', 'small', 'sub', 'sup', 'code'];
+        const prettifyHTML = (html) => {
+            if (!html) return '';
+            const selfClosing = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+            const blockTags = new Set(['html', 'head', 'body', 'header', 'footer', 'main', 'nav', 'section', 'article', 'aside', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'form', 'fieldset', 'script', 'style', 'link', 'meta', 'title']);
+            const preserveTags = new Set(['script', 'style', 'pre', 'code', 'textarea']);
 
-            let formatted = '';
-            let indent = 0;
-            const indentStr = '  '; // 2 пробела
+            let result = '', indent = 0, inPreserve = false, preserveTag = '';
+            const tokens = html.match(/<[^>]+>|[^<]+/g) || [];
 
-            // Разбиваем по тегам
-            const tokens = html.replace(/>\s*</g, '>\n<').split('\n');
+            for (const token of tokens) {
+                if (token.startsWith('<')) {
+                    const isClosing = token.startsWith('</');
+                    const getTagName = t => { const m = t.match(/<\/?([a-zA-Z0-9]+)/); return m ? m[1].toLowerCase() : ''; };
+                    const tagName = getTagName(token);
+                    const isSelfClosing = token.endsWith('/>') || selfClosing.has(tagName);
 
-            for (let token of tokens) {
-                token = token.trim();
-                if (!token) continue;
+                    if (preserveTags.has(tagName)) {
+                        isClosing ? (inPreserve = false, preserveTag = '') : (!isSelfClosing && (inPreserve = true, preserveTag = tagName));
+                    }
 
-                // Закрывающий тег — уменьшаем отступ
-                if (token.match(/^<\/\w/) && !token.match(/^<\/(a|span|strong|em|b|i|u|small|sub|sup|code)>/i)) {
-                    indent = Math.max(0, indent - 1);
-                }
+                    if (inPreserve && !token.includes(`<${preserveTag}`) && !token.includes(`</${preserveTag}`)) {
+                        result += token;
+                        continue;
+                    }
 
-                // Добавляем строку с отступом
-                formatted += indentStr.repeat(indent) + token + '\n';
-
-                // Открывающий тег (не self-closing и не inline) — увеличиваем отступ
-                if (token.match(/^<\w[^>]*[^\/]>$/) &&
-                    !token.match(/^<(img|br|hr|input|meta|link|area|base|col|embed|param|source|track|wbr)/i) &&
-                    !token.match(/^<(a|span|strong|em|b|i|u|small|sub|sup|code)\s/i) &&
-                    !token.includes('</')) {
-                    indent++;
-                }
-
-                // Self-closing тег — не меняем отступ
-                if (token.match(/\/>$/)) {
-                    // do nothing
+                    if (isClosing) indent = Math.max(0, indent - 1);
+                    if (blockTags.has(tagName)) result += '\n' + ' '.repeat(indent * 2) + token;
+                    else result += token;
+                    if (!isClosing && !isSelfClosing && blockTags.has(tagName)) indent++;
+                } else {
+                    const trimmed = token.trim();
+                    if (trimmed) result += inPreserve ? token : trimmed;
                 }
             }
 
-            // Чистим пустые строки подряд
-            formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
+            return result.replace(/\n{3,}/g, '\n\n').trim();
+        };
 
-            return formatted;
-        },
+        // ═══════════════════════════════════════════════════════════════
+        // CSS MATCHING
+        // ═══════════════════════════════════════════════════════════════
 
-        /**
-         * Собирает все классы, используемые элементом и потомками
-         */
-        collectUsedClasses(element) {
+        const collectUsedClasses = (element) => {
             const classes = new Set();
-
             const traverse = (el) => {
-                if (el.nodeType !== Node.ELEMENT_NODE) return;
-                el.classList.forEach(c => classes.add(c));
+                if (el.classList) el.classList.forEach(c => classes.add(c));
                 for (const child of el.children) traverse(child);
             };
-
             traverse(element);
             return classes;
-        },
+        };
 
-        /**
-         * Находит CSS правила, которые матчат использованные классы, теги, IDs
-         */
-        getMatchedCSSRules(usedClasses, element) {
-            const matchedRules = [];
-
-            // Собираем все использованные теги и IDs
-            const usedTags = new Set();
-            const usedIds = new Set();
-            const usedDataAttrs = new Set();
-
-            const collectSelectors = (el) => {
-                if (el.nodeType !== Node.ELEMENT_NODE) return;
-                usedTags.add(el.tagName.toLowerCase());
-                if (el.id) usedIds.add(el.id);
-                // Собираем data-атрибуты
-                for (const attr of el.attributes) {
-                    if (attr.name.startsWith('data-')) {
-                        usedDataAttrs.add(attr.name);
-                    }
-                }
-                for (const child of el.children) collectSelectors(child);
+        const getMatchedCSSRules = (usedClasses, element) => {
+            const selectors = new Set();
+            const collect = (el) => {
+                selectors.add(el.tagName.toLowerCase());
+                if (el.classList) el.classList.forEach(c => selectors.add(`.${c}`));
+                if (el.id) selectors.add(`#${el.id}`);
             };
+            collect(element);
+            element.querySelectorAll('*').forEach(collect);
 
-            if (element) collectSelectors(element);
+            const matched = [], seen = new Set();
 
-            for (const rule of this.allCSSRules) {
-                const selector = rule.selector;
-                let shouldInclude = false;
+            for (const rule of allCSSRules) {
+                const sel = rule.selector;
+                if (seen.has(sel)) continue;
 
-                // 1. Проверяем классы
-                for (const cls of usedClasses) {
-                    if (selector.includes('.' + cls)) {
-                        shouldInclude = true;
-                        break;
+                let matches = sel.startsWith('@media') || sel === '*' || sel === 'html' || sel === 'body';
+                if (!matches) {
+                    for (const s of selectors) {
+                        if (sel.includes(s.replace('.', '').replace('#', ''))) { matches = true; break; }
+                    }
+                }
+                if (!matches) {
+                    for (const c of usedClasses) {
+                        if (sel.includes(c)) { matches = true; break; }
                     }
                 }
 
-                // 2. Проверяем теги
-                if (!shouldInclude) {
-                    for (const tag of usedTags) {
-                        // Матчим tag в начале или после пробела/запятой
-                        const tagPattern = new RegExp(`(^|[\\s,>+~])${tag}([\\s,.:#\\[>+~]|$)`, 'i');
-                        if (tagPattern.test(selector)) {
-                            shouldInclude = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 3. Проверяем IDs
-                if (!shouldInclude) {
-                    for (const id of usedIds) {
-                        if (selector.includes('#' + id)) {
-                            shouldInclude = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 4. Проверяем data-атрибутные селекторы
-                if (!shouldInclude) {
-                    for (const dataAttr of usedDataAttrs) {
-                        if (selector.includes('[' + dataAttr)) {
-                            shouldInclude = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 5. Универсальные правила (*, :root, html, body)
-                if (!shouldInclude) {
-                    if (selector === '*' ||
-                        selector.startsWith('*,') ||
-                        selector.includes(' *') ||
-                        selector === ':root' ||
-                        selector === 'html' ||
-                        selector === 'body' ||
-                        selector.startsWith('html ') ||
-                        selector.startsWith('body ') ||
-                        selector.startsWith(':root ') ||
-                        selector.includes('::selection') ||
-                        selector.includes(':focus') ||
-                        selector.includes(':hover') ||
-                        selector.includes('::before') ||
-                        selector.includes('::after') ||
-                        selector.includes('::-webkit') ||
-                        selector.includes('::placeholder')) {
-                        shouldInclude = true;
-                    }
-                }
-
-                // 6. Keyframe-связанные селекторы (animation-)
-                if (!shouldInclude && selector.includes('[class*=')) {
-                    shouldInclude = true;
-                }
-
-                if (shouldInclude) {
-                    matchedRules.push(rule.cssText);
+                if (matches) {
+                    seen.add(sel);
+                    matched.push(sel.startsWith('@media') ? `${sel} {\n${rule.cssText}\n}` : `${sel} { ${rule.cssText} }`);
                 }
             }
 
-            return [...new Set(matchedRules)];
-        },
+            return matched.join('\n');
+        };
 
-        /**
-         * Собирает Google Fonts
-         */
-        collectGoogleFonts() {
-            const fonts = [];
+        const hasTailwind = () => {
+            const indicators = ['flex', 'grid', 'items-center', 'justify-center', 'bg-', 'text-', 'p-', 'm-', 'rounded', 'shadow', 'hover:', 'md:'];
+            const allClasses = document.body.className + ' ' + Array.from(document.querySelectorAll('[class]')).map(el => el.className).join(' ');
+            return indicators.some(i => allClasses.includes(i));
+        };
 
-            document.querySelectorAll('link[href*="fonts.googleapis.com"]').forEach(link => {
-                fonts.push(`@import url('${link.href}');`);
-            });
+        // ═══════════════════════════════════════════════════════════════
+        // ANIMATION GENERATION
+        // ═══════════════════════════════════════════════════════════════
 
-            return fonts.join('\n');
-        },
-
-        /**
-         * Генерирует CSS переменные
-         */
-        generateCSSVariables() {
-            if (this.cssVariables.size === 0) return '';
-
-            let css = ':root {\n';
-            this.cssVariables.forEach((value, name) => {
-                css += `  ${name}: ${value};\n`;
-            });
-            css += '}\n\n';
-
-            return css;
-        },
-
-        /**
-         * Генерирует CSS reveal-анимации (универсально для всех фреймворков)
-         * Webflow, Next.js, Framer Motion, GSAP — все получают CSS fallback
-         */
-        generateRevealAnimations(element) {
-            // Проверяем наличие элементов с inline style (признак JS-анимаций)
-            const hasAnimatedElements = element.querySelector('[style*="opacity"]') !== null ||
-                element.querySelector('[style*="transform"]') !== null ||
-                element.querySelector('[data-w-id]') !== null;
-
-            // Всегда генерируем CSS для Next.js/Framer Motion (они не имеют data-w-id)
-            // но имеют inline styles с opacity и transform
-
+        const generateRevealAnimationsCSS = () => {
+            const mDur = `${DEFAULTS.durations.marquee / 1000}s`;
             return `
-/* Ninja-Snatch Universal Reveal Animations v7.5 */
-
-/* CRITICAL: Force visibility - override ALL inline opacity/transform */
-*[style*="opacity"] {
-    opacity: 1 !important;
-}
-
-*[style*="transform"] {
-    transform: none !important;
-}
-
-/* Webflow specific */
-[data-w-id] {
-    opacity: 1 !important;
-    transform: none !important;
-}
-
-/* Framer Motion / React specific */
-[style*="opacity: 0"],
-[style*="opacity:0"] {
-    opacity: 1 !important;
-}
-
-/* Entrance animations with staggered delays */
+/* Ninja-Snatch v${VERSION} Reveal Animations */
 @keyframes snatch-fade-up {
-    from { 
-        opacity: 0; 
-        transform: translateY(20px); 
-    }
-    to { 
-        opacity: 1; 
-        transform: translateY(0); 
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes snatch-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
 }
-
-/* Apply to common section patterns */
-section,
-main > div,
-header,
-.section,
-.hero,
-.hero-content,
-.container-wide > div,
-article {
+section, main > div, header, .section, .hero, .hero-content, .container-wide > div, article {
     animation: snatch-fade-up 0.6s ease-out forwards;
 }
-
-/* Staggered cascade effect */
 section:nth-of-type(1) { animation-delay: 0s; }
 section:nth-of-type(2) { animation-delay: 0.1s; }
 section:nth-of-type(3) { animation-delay: 0.2s; }
 section:nth-of-type(4) { animation-delay: 0.3s; }
 section:nth-of-type(5) { animation-delay: 0.4s; }
 section:nth-of-type(n+6) { animation-delay: 0.5s; }
-
-/* Grid children animation */
-.grid > * {
-    animation: snatch-fade-up 0.5s ease-out forwards;
-}
-
+.grid > * { animation: snatch-fade-up 0.5s ease-out forwards; }
 .grid > *:nth-child(1) { animation-delay: 0s; }
 .grid > *:nth-child(2) { animation-delay: 0.05s; }
 .grid > *:nth-child(3) { animation-delay: 0.1s; }
 .grid > *:nth-child(4) { animation-delay: 0.15s; }
 .grid > *:nth-child(5) { animation-delay: 0.2s; }
 .grid > *:nth-child(n+6) { animation-delay: 0.25s; }
-
-/* Marquee animations (Webflow style) */
-.marquee-track, [class*="marquee"] > div {
-    animation: snatch-marquee 25s linear infinite;
-}
-
-.marquee-reverse-track {
-    animation: snatch-marquee 25s linear infinite reverse;
-}
-
+.marquee-track, [class*="marquee"] > div { animation: snatch-marquee ${mDur} linear infinite; }
+.marquee-reverse-track { animation: snatch-marquee ${mDur} linear infinite reverse; }
 @keyframes snatch-marquee {
-    from { transform: translateX(0) !important; }
-    to { transform: translateX(-50%) !important; }
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
 }
-
-/* Hover effects */
-a:hover img,
-.group:hover img {
-    transform: scale(1.02) !important;
-    transition: transform 0.4s ease;
-}
-
-button:hover,
-a[class*="btn"]:hover {
-    transform: translateY(-2px) !important;
-    transition: transform 0.2s ease;
-}
-
-/* Ensure images are visible */
-img {
-    opacity: 1 !important;
-}
+a:hover img, .group:hover img { transform: scale(1.02) !important; transition: transform 0.4s ease; }
+button:hover, a[class*="btn"]:hover { transform: translateY(-2px) !important; transition: transform 0.2s ease; }
+img { opacity: 1 !important; }
 `;
-        },
+        };
 
-        /**
-         * Применяет стили и возвращает HTML
-         * НЕ УБИРАЕТ оригинальные классы!
-         */
-        injectStyles(element) {
-            this.init();
+        const generateAnimationScript = () => {
+            const eo = JSON.stringify(EASING.EXPO_OUT);
+            return `
+// Ninja-Snatch v${VERSION}
+(async () => {
+  try {
+    const { animate, inView } = await import('${DEFAULTS.motionDevCdn}');
+    const skip = el => el.closest('[aria-hidden]') || el.closest('.modal') || el.classList.contains('pointer-events-none') || el.closest('.pointer-events-none');
+    
+    document.querySelectorAll('[style*="opacity:0"], [style*="opacity: 0"]').forEach((el, i) => {
+      if (skip(el)) return;
+      animate(el, { opacity: 1 }, { duration: ${DEFAULTS.durations.reveal / 1000}, delay: Math.min(i * 0.08, 1), easing: ${eo} });
+    });
+    
+    document.querySelectorAll('[style*="translateY"], [style*="translateX"]').forEach((el, i) => {
+      if (skip(el) || el.closest('[class*="marquee"]') || el.parentElement?.querySelector('[class*="whitespace-nowrap"]')) return;
+      if (el.classList.contains('whitespace-nowrap') && el.children.length > 4) return;
+      animate(el, { transform: 'translateY(0) translateX(0)' }, { duration: ${DEFAULTS.durations.transform / 1000}, delay: Math.min(i * 0.06, 0.8), easing: ${eo} });
+    });
+    
+    // UNIVERSAL Counter Detection
+    const counterAttrs = ['data-target','data-count','data-value','data-end','data-number'];
+    const suffixDefaults = {'+':50,'%':98,'k':10,'K':10,'M':1};
+    document.querySelectorAll('span, [class*="counter"], [class*="stat"], [class*="number"]').forEach(el => {
+      const text = el.textContent.trim();
+      if (!/^[0-9]{1,2}$/.test(text) && text !== '0') return;
+      let target = null;
+      for (const attr of counterAttrs) {
+        const val = el.getAttribute(attr) || el.closest('[' + attr + ']')?.getAttribute(attr);
+        if (val) { target = parseInt(val); break; }
+      }
+      if (!target) {
+        const sib = el.nextElementSibling;
+        const suffix = sib?.textContent?.trim()?.charAt(0);
+        if (suffix && suffixDefaults[suffix]) {
+          target = suffixDefaults[suffix];
+          if (suffix === '+') {
+            const p = el.closest('[class*="grid"]');
+            if (p) {
+              const items = p.querySelectorAll('[class*="text-center"], [class*="stat"]');
+              const idx = Array.from(items).indexOf(el.closest('[class*="text-center"], [class*="stat"]'));
+              target = [50,5,100,150,200,250,300][idx] || 50;
+            }
+          }
+        }
+      }
+      if (!target || target <= 0) return;
+      const c = el.closest('[class*="counter"], [class*="stat"], [class*="text-center"]') || el.parentElement;
+      if (!c) return;
+      inView(c, () => {
+        let cur = parseInt(text) || 0; const startVal = cur; const dur = ${DEFAULTS.durations.counter}, st = Date.now();
+        (function u() { const p = Math.min((Date.now()-st)/dur,1); cur = Math.round(startVal + (1-Math.pow(1-p,3))*(target-startVal)); el.textContent = cur; if(p<1) requestAnimationFrame(u); })();
+      }, { margin: '-50px' });
+    });
+    
+    document.querySelectorAll('.marquee-track, [class*="marquee-track"]').forEach(el => { el.style.transform = 'translateX(0)'; el.style.animation = 'snatch-marquee ${DEFAULTS.durations.marquee / 1000}s linear infinite'; });
+    document.querySelectorAll('.marquee-reverse-track, [class*="marquee-reverse-track"]').forEach(el => { el.style.transform = 'translateX(0)'; el.style.animation = 'snatch-marquee ${DEFAULTS.durations.marquee / 1000}s linear infinite reverse'; });
+    document.querySelectorAll('[class*="whitespace-nowrap"], [class*="scroll"]').forEach(el => {
+      if (getComputedStyle(el).animationName !== 'none' || el.closest('.pointer-events-none') || el.style.animation) return;
+      const ch = el.children;
+      if (ch.length >= 4 && ch[0]?.textContent?.trim() === ch[Math.floor(ch.length/2)]?.textContent?.trim()) {
+        el.style.animation = 'snatch-marquee ${DEFAULTS.durations.marquee / 1000}s linear infinite';
+      }
+    });
+    
+    console.log('[Snatch] v${VERSION} animations applied');
+  } catch (e) {
+    document.querySelectorAll('[style*="opacity:0"], [style*="opacity: 0"]').forEach(el => el.style.opacity = '1');
+    console.log('[Snatch] Fallback: revealed hidden elements');
+  }
+})();
+`;
+        };
 
-            let clone = element.cloneNode(true);
+        const generateCursorScript = () => `
+// UNIVERSAL Custom Cursor Fix
+(function() {
+  const cursorSelectors = ['[class*="z-[9999]"]','[class*="z-[999]"]','[class*="cursor"]','[class*="Cursor"]','.custom-cursor','.cursor-dot','.cursor-outline','.cursor-follower','.mouse-follower'];
+  let cursors = [];
+  for (const sel of cursorSelectors) { try { document.querySelectorAll(sel).forEach(el => { if (!cursors.includes(el)) cursors.push(el); }); } catch(e) {} }
+  // Structural detection fallback
+  if (!cursors.length) {
+    document.querySelectorAll('*').forEach(el => {
+      const s = getComputedStyle(el);
+      if (s.position === 'fixed' && s.pointerEvents === 'none' && el.offsetWidth < 100 && el.offsetHeight < 100 && parseInt(s.zIndex) > 9000) cursors.push(el);
+    });
+  }
+  if (!cursors.length) return;
+  let mx = 0, my = 0;
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+  (function tick() { cursors.forEach(c => c.style.transform = 'translate(' + mx + 'px, ' + my + 'px) translate(-50%, -50%)'); requestAnimationFrame(tick); })();
+  console.log('[Snatch] Cursor activated (' + cursors.length + ' elements)');
+})();
+`;
 
-            // Очистка от расширений и фикс URL
-            clone = this.cleanHTML(clone);
-            clone = this.fixHTMLUrls(clone);
-            clone = this.fixAnimationStates(clone);
+        // ═══════════════════════════════════════════════════════════════
+        // PUBLIC API
+        // ═══════════════════════════════════════════════════════════════
 
-            const usedClasses = this.collectUsedClasses(element);
-            const matchedRules = this.getMatchedCSSRules(usedClasses, element);
+        return {
+            version: VERSION,
 
-            // Google Fonts
-            const googleFonts = this.collectGoogleFonts();
+            init() {
+                pageOrigin = window.location.origin;
+                _log('info', `Initializing v${VERSION}`);
+                collectAllCSS();
+            },
 
-            // Font-faces
-            const fontFaces = [...new Set(this.allFontFaces)].join('\n\n');
+            _prepareExport(element) {
+                let clone = element.cloneNode(true);
+                clone = cleanHTML(clone);
+                clone = cleanupAttributes(clone);
+                clone = fixAnimationStates(clone);
+                clone = fixHTMLUrls(clone);
 
-            // Keyframes
-            const keyframes = [...new Set(this.allKeyframes)].join('\n\n');
+                const usedClasses = collectUsedClasses(clone);
 
-            // CSS variables
-            const variables = this.generateCSSVariables();
+                return {
+                    clone,
+                    cssData: {
+                        externalLinks: collectExternalLinks(),
+                        googleFonts: collectGoogleFonts(),
+                        fontFaces: allFontFaces.join('\n\n'),
+                        variables: generateCSSVariables(),
+                        keyframes: allKeyframes.join('\n\n'),
+                        matchedCSS: getMatchedCSSRules(usedClasses, clone),
+                        revealAnimations: generateRevealAnimationsCSS(),
+                        hasTailwind: hasTailwind()
+                    }
+                };
+            },
 
-            // Matched CSS rules
-            const matchedCSS = matchedRules.join('\n\n');
+            injectStyles(element) {
+                this.init();
+                const { clone, cssData } = this._prepareExport(element);
+                return prettifyHTML(`<style>\n${cssData.variables}\n${cssData.fontFaces}\n${cssData.keyframes}\n${cssData.matchedCSS}\n${cssData.revealAnimations}\n</style>\n${clone.outerHTML}`);
+            },
 
-            // Reveal animations
-            const revealAnimations = this.generateRevealAnimations(element);
+            createStyledDocument(element, title = DEFAULTS.defaultTitle) {
+                this.init();
+                const { clone, cssData } = this._prepareExport(element);
+                const bodyStyle = window.getComputedStyle(document.body);
+                const tailwind = cssData.hasTailwind ? `<script src="${DEFAULTS.tailwindCdn}"></script>` : '';
 
-            // External stylesheets (Webflow, Framer, etc.)
-            const externalLinks = this.collectExternalLinks();
-
-            const rawHTML = `${externalLinks}
-<style>
-/* Ninja-Snatch v7.6 */
-${googleFonts}
-
-${fontFaces}
-
-${variables}
-
-${keyframes}
-
-${matchedCSS}
-
-${revealAnimations}
-</style>
-
-${clone.outerHTML}`;
-
-            return this.prettifyHTML(rawHTML);
-        },
-
-        /**
-         * Создаёт полный документ
-         */
-        createStyledDocument(element, title = 'Snatched Content') {
-            this.init();
-
-            let clone = element.cloneNode(true);
-
-            // Очистка от расширений и фикс URL
-            clone = this.cleanHTML(clone);
-            clone = this.fixHTMLUrls(clone);
-            clone = this.fixAnimationStates(clone);
-
-            const usedClasses = this.collectUsedClasses(element);
-            const matchedRules = this.getMatchedCSSRules(usedClasses, element);
-
-            // Google Fonts
-            const googleFonts = this.collectGoogleFonts();
-
-            // Font-faces с абсолютными URL
-            const fontFaces = [...new Set(this.allFontFaces)].join('\n\n');
-
-            // Keyframes
-            const keyframes = [...new Set(this.allKeyframes)].join('\n\n');
-
-            // CSS variables
-            const variables = this.generateCSSVariables();
-
-            // Matched CSS rules
-            const matchedCSS = matchedRules.join('\n\n');
-
-            // Tailwind detection
-            const hasTailwind = usedClasses.size > 20 &&
-                [...usedClasses].some(c => /^(flex|grid|hidden|p-|m-|w-|h-|text-|bg-)/.test(c));
-
-            const tailwindScript = hasTailwind
-                ? '<script src="https://cdn.tailwindcss.com"></script>'
-                : '';
-
-            // Reveal animations for Webflow elements
-            const revealAnimations = this.generateRevealAnimations(element);
-
-            // External stylesheets (Webflow, Framer, etc.)
-            const externalLinks = this.collectExternalLinks();
-
-            // Body styles
-            const bodyStyle = window.getComputedStyle(document.body);
-
-            const rawHTML = `<!DOCTYPE html>
+                return prettifyHTML(`<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
-${externalLinks}
-${tailwindScript}
+${cssData.externalLinks}
+${tailwind}
 <style>
-/* Ninja-Snatch v7.6 + External CSS */
-${googleFonts}
-
-${fontFaces}
-
-${variables}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
+/* Ninja-Snatch v${VERSION} */
+${cssData.googleFonts}
+${cssData.fontFaces}
+${cssData.variables}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
   background: ${bodyStyle.backgroundColor || '#000'};
   color: ${bodyStyle.color || '#fff'};
   font-family: ${bodyStyle.fontFamily};
   min-height: 100vh;
 }
-
-${keyframes}
-
-${matchedCSS}
-
-${revealAnimations}
+${cssData.keyframes}
+${cssData.matchedCSS}
+${cssData.revealAnimations}
 </style>
 </head>
 <body>
 ${clone.outerHTML}
+<script type="module">
+${generateAnimationScript()}
+${generateCursorScript()}
+</script>
 </body>
-</html>`;
+</html>`);
+            },
 
-            return this.prettifyHTML(rawHTML);
-        }
-    };
+            // Legacy compatibility - functions
+            collectAllCSS,
+            collectUsedClasses,
+            getMatchedCSSRules,
+            collectExternalLinks,
+            collectGoogleFonts,
+            generateCSSVariables,
+            cleanHTML,
+            fixAnimationStates,
+            fixHTMLUrls,
+            cleanupAttributes,
+            prettifyHTML,
+            generateRevealAnimations: generateRevealAnimationsCSS,
+            fixRelativeURLs(cssText) { return fixCSSUrls(cssText, pageOrigin); },
 
-    if (typeof window !== 'undefined') {
-        window.StyleInjector = StyleInjector;
-    }
+            // Legacy compatibility - state (for tests)
+            get pageOrigin() { return pageOrigin; },
+            set pageOrigin(v) { pageOrigin = v; },
+            get allKeyframes() { return allKeyframes; },
+            set allKeyframes(v) { allKeyframes = v; },
+            get allFontFaces() { return allFontFaces; },
+            set allFontFaces(v) { allFontFaces = v; },
+            get allCSSRules() { return allCSSRules; },
+            set allCSSRules(v) { allCSSRules = v; },
+            get cssVariables() { return cssVariables; },
+            set cssVariables(v) { cssVariables = v; },
+            get externalStylesheets() { return externalStylesheets; },
+            set externalStylesheets(v) { externalStylesheets = v; },
+            classCounter: 0  // Legacy property
+        };
+    })();
+
+    // Export to window
+    window.StyleInjector = StyleInjector;
 
 } // end guard

@@ -1,0 +1,30 @@
+{
+    "name": "ninja-snatch",
+    "version": "1.2.0",
+    "description": "Chrome Extension для копирования HTML блоков с сохранением стилей",
+    "private": true,
+    "scripts": {
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0",
+        "jest-environment-jsdom": "^29.7.0"
+    },
+    "jest": {
+        "testEnvironment": "jsdom",
+        "testMatch": [
+            "**/tests/**/*.test.js"
+        ],
+        "moduleFileExtensions": [
+            "js"
+        ],
+        "collectCoverageFrom": [
+            "styleInjector.js",
+            "utils.js"
+        ],
+        "coverageDirectory": "coverage",
+        "verbose": true
+    }
+}

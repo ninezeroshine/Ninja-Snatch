@@ -4,7 +4,7 @@
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)
-![Version](https://img.shields.io/badge/Version-1.1-blue)
+![Version](https://img.shields.io/badge/Version-9.0-blue)
 
 ---
 
@@ -77,7 +77,7 @@ Ninja-Snatch/
 └── utils.js           # Вспомогательные функции
 ```
 
-### styleInjector.js (v7.6)
+### styleInjector.js (v9.0)
 
 Главный модуль, отвечающий за:
 
@@ -133,7 +133,15 @@ git clone https://github.com/youruser/ninja-snatch.git
 
 ## 📝 Changelog
 
-### v7.6 (Latest)
+### v9.0 (Latest) — Phase 2 Completion
+- 🆕 **Scroll-trigger Support** — детекция и восстановление анимаций при скролле (AOS, Locomotive, Webflow)
+- 🆕 **Smart Counter Detection** — автоматическая анимация чисел и статистик
+- 🆕 **Universal Custom Cursor** — захват и инициализация кастомных курсоров
+- 🆕 **Marquee v2** — стабильное распознавание и восстановление бесконечных лент
+- 🆕 **Regex Engine Refactor** — устранение проблем с экранированием и спецсимволами
+- 🐛 Исправлен сброс состояний для сложных `transform` и `opacity`
+
+### v7.6
 - 🆕 External CSS capture (Webflow CDN, Framer)
 - 🆕 Improved CSS matching (tags, IDs, data-*)
 - 🐛 Fixed StyleInjector redeclaration error

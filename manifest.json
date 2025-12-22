@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Ninja Snatch",
-  "version": "1.1",
-  "description": "Вытаскивает чистый HTML из iframe/srcdoc в один клик. Ultimate Frontend Sniper.",
+  "version": "9.0",
+  "description": "Extract complete HTML with CSS and animations. Modular architecture v9.0.",
   "permissions": [
     "activeTab",
     "scripting",
