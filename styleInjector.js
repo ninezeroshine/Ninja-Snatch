@@ -8,8 +8,11 @@
  * This file bridges the old API with the new modular architecture.
  */
 
+// Initialize namespace
+window.__NINJA_SNATCH__ = window.__NINJA_SNATCH__ || {};
+
 // Guard against multiple injections
-if (typeof window.StyleInjector !== 'undefined') {
+if (typeof window.__NINJA_SNATCH__.StyleInjector !== 'undefined') {
     console.log('[Snatch] StyleInjector already loaded, skipping...');
 } else {
 
@@ -42,7 +45,7 @@ if (typeof window.StyleInjector !== 'undefined') {
         };
 
         // Load patterns from SnatcherConfig if available, otherwise use defaults
-        const getConfig = () => window.SnatcherConfig || {};
+        const getConfig = () => window.__NINJA_SNATCH__?.SnatcherConfig || window.SnatcherConfig || {};
         const cfg = getConfig();
 
         const PATTERNS = {
@@ -1002,6 +1005,11 @@ ${generateCursorScript()}
                 return `${context}\n${lines.join('\n')}`;
             },
 
+            // Alias for renamed function (Compact = LLM)
+            createCompactExport(element) {
+                return this.createLLMExport(element);
+            },
+
             // Legacy compatibility - functions
             collectAllCSS,
             collectUsedClasses,
@@ -1033,7 +1041,10 @@ ${generateCursorScript()}
         };
     })();
 
-    // Export to window
+    // Export to namespace
+    window.__NINJA_SNATCH__.StyleInjector = StyleInjector;
+
+    // Legacy compatibility
     window.StyleInjector = StyleInjector;
 
 } // end guard

@@ -9,8 +9,11 @@
  * - Data attribute handling
  */
 
+// Initialize namespace
+window.__NINJA_SNATCH__ = window.__NINJA_SNATCH__ || {};
+
 // Guard against multiple injections
-if (typeof window.SnatcherConfig === 'undefined') {
+if (typeof window.__NINJA_SNATCH__.SnatcherConfig === 'undefined') {
 
     const SnatcherConfig = {
         /** Version */
@@ -243,7 +246,10 @@ if (typeof window.SnatcherConfig === 'undefined') {
         }
     };
 
-    // Export to window
+    // Export to namespace
+    window.__NINJA_SNATCH__.SnatcherConfig = SnatcherConfig;
+
+    // Legacy compatibility
     if (typeof window !== 'undefined') {
         window.SnatcherConfig = SnatcherConfig;
     }

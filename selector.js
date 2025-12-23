@@ -1,5 +1,7 @@
 (function () {
-    if (window.snatcherInstance) return;
+    // Use namespace for guard
+    window.__NINJA_SNATCH__ = window.__NINJA_SNATCH__ || {};
+    if (window.__NINJA_SNATCH__.snatcherInstance) return;
 
     class SniperSelector {
         constructor() {
@@ -82,16 +84,18 @@
             const outputMode = window.snatcherMode || 'copy';
             const extractMode = window.snatcherExtractMode || 'clean';
             const useStyles = extractMode === 'styled';
-            const useLLM = extractMode === 'llm';
+            const useCompact = extractMode === 'compact' || extractMode === 'llm'; // Support both names
 
             try {
                 let html;
                 let fullDoc;
 
-                if (useLLM && window.StyleInjector) {
-                    // LLM mode - compact, clean output for AI
-                    html = window.StyleInjector.createLLMExport(el);
-                    fullDoc = html; // Same content for download
+                if (useCompact && window.StyleInjector) {
+                    // Compact mode - clean output for Tailwind/Webflow
+                    html = window.StyleInjector.createCompactExport
+                        ? window.StyleInjector.createCompactExport(el)
+                        : window.StyleInjector.createLLMExport(el); // Fallback
+                    fullDoc = html;
                 } else if (useStyles && window.StyleInjector) {
                     // Styled mode - full CSS included
                     html = window.StyleInjector.injectStyles(el);
@@ -112,12 +116,12 @@
 
                 if (outputMode === 'copy') {
                     await navigator.clipboard.writeText(html);
-                    const msg = useLLM ? 'Код для LLM скопирован! 🤖' : (useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋');
+                    const msg = useCompact ? 'Compact код скопирован! 📦' : (useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋');
                     this.showToast(msg, 'success');
                 } else {
                     // Используем background script для скачивания
                     const title = (el.tagName + '_' + (el.id || el.className || 'element')).substring(0, 30);
-                    const modeSuffix = useLLM ? '_llm' : (useStyles ? '_styled' : '');
+                    const modeSuffix = useCompact ? '_compact' : (useStyles ? '_styled' : '');
                     const filename = title.replace(/[^a-z0-9]/gi, '_') + modeSuffix + '.html';
 
                     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
@@ -126,7 +130,7 @@
                             data: { content: fullDoc, filename }
                         }, (response) => {
                             if (response && response.success) {
-                                const msg = useLLM ? 'LLM файл сохранён! 🤖' : (useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾');
+                                const msg = useCompact ? 'Compact файл сохранён! 📦' : (useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾');
                                 this.showToast(msg, 'success');
                             } else {
                                 // Fallback к прямому скачиванию
@@ -192,7 +196,7 @@
                 document.removeEventListener('keydown', this.boundKeyDown, true);
                 this.overlay.remove();
                 document.body.style.cursor = '';
-                window.snatcherInstance = null;
+                window.__NINJA_SNATCH__.snatcherInstance = null;
             } catch (err) {
                 console.error('[Snatcher] Destroy error:', err);
             }

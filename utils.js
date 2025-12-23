@@ -76,8 +76,11 @@ ${html}
         };
     }
 };
-
-// Экспорт для использования в разных контекстах
+// Initialize namespace and export
 if (typeof window !== 'undefined') {
+    window.__NINJA_SNATCH__ = window.__NINJA_SNATCH__ || {};
+    window.__NINJA_SNATCH__.SnatcherUtils = SnatcherUtils;
+
+    // Legacy compatibility
     window.SnatcherUtils = SnatcherUtils;
 }

@@ -105,6 +105,11 @@ document.getElementById("visualSelectBtn").addEventListener("click", async () =>
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: (mode, extract) => {
+        // Initialize namespace
+        window.__NINJA_SNATCH__ = window.__NINJA_SNATCH__ || {};
+        window.__NINJA_SNATCH__.snatcherMode = mode;
+        window.__NINJA_SNATCH__.snatcherExtractMode = extract;
+        // Legacy compatibility
         window.snatcherMode = mode;
         window.snatcherExtractMode = extract;
       },
