@@ -1,12 +1,17 @@
 const status = document.getElementById("status");
 const modeBtns = document.querySelectorAll('.mode-btn');
 const extractModeRadios = document.querySelectorAll('input[name="extractMode"]');
+const smartSettings = document.getElementById('smartSettings');
+const enableAI = document.getElementById('enableAI');
+const apiKeySection = document.getElementById('apiKeySection');
+const apiKeyInput = document.getElementById('apiKey');
+const targetFormatSelect = document.getElementById('targetFormat');
 
 let outputMode = 'copy'; // copy или download
-let extractMode = 'clean'; // clean или styled
+let extractMode = 'clean'; // clean, styled, compact, smart
 
 // 1. Инициализация из хранилища
-chrome.storage.local.get(['outputMode', 'extractMode'], (result) => {
+chrome.storage.local.get(['outputMode', 'extractMode', 'smartExtractSettings'], (result) => {
   if (result.outputMode) {
     outputMode = result.outputMode;
     updateOutputModeUI();
@@ -14,6 +19,20 @@ chrome.storage.local.get(['outputMode', 'extractMode'], (result) => {
   if (result.extractMode) {
     extractMode = result.extractMode;
     updateExtractModeUI();
+  }
+  // Smart Extract settings
+  if (result.smartExtractSettings) {
+    const settings = result.smartExtractSettings;
+    if (settings.format && targetFormatSelect) {
+      targetFormatSelect.value = settings.format;
+    }
+    if (settings.enableAI && enableAI) {
+      enableAI.checked = settings.enableAI;
+      toggleApiKeySection();
+    }
+    if (settings.apiKey && apiKeyInput) {
+      apiKeyInput.value = settings.apiKey;
+    }
   }
 });
 
@@ -26,13 +45,51 @@ modeBtns.forEach(btn => {
   });
 });
 
-// 3. Переключатель режима извлечения (чистый/со стилями)
+// 3. Переключатель режима извлечения (чистый/со стилями/compact/smart)
 extractModeRadios.forEach(radio => {
   radio.addEventListener('change', () => {
     extractMode = radio.value;
     chrome.storage.local.set({ extractMode });
+    toggleSmartSettings();
   });
 });
+
+// 4. Smart Extract Settings
+function toggleSmartSettings() {
+  if (smartSettings) {
+    smartSettings.classList.toggle('hidden', extractMode !== 'smart');
+  }
+}
+
+function toggleApiKeySection() {
+  if (apiKeySection && enableAI) {
+    apiKeySection.classList.toggle('hidden', !enableAI.checked);
+  }
+}
+
+if (enableAI) {
+  enableAI.addEventListener('change', () => {
+    toggleApiKeySection();
+    saveSmartSettings();
+  });
+}
+
+if (apiKeyInput) {
+  apiKeyInput.addEventListener('change', saveSmartSettings);
+}
+
+if (targetFormatSelect) {
+  targetFormatSelect.addEventListener('change', saveSmartSettings);
+}
+
+function saveSmartSettings() {
+  const settings = {
+    format: targetFormatSelect?.value || 'react-tailwind',
+    enableAI: enableAI?.checked || false,
+    apiKey: apiKeyInput?.value || ''
+  };
+  chrome.storage.local.set({ smartExtractSettings: settings });
+}
 
 function updateOutputModeUI() {
   modeBtns.forEach(btn => {
@@ -44,6 +101,7 @@ function updateExtractModeUI() {
   extractModeRadios.forEach(radio => {
     radio.checked = radio.value === extractMode;
   });
+  toggleSmartSettings();
 }
 
 // ============================================
@@ -102,18 +160,32 @@ document.getElementById("visualSelectBtn").addEventListener("click", async () =>
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['config.js'] });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['styleInjector.js'] });
 
+    // Инжектируем smartStyleInjector.js и smartExtract.js если режим smart
+    if (extractMode === 'smart') {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['smartStyleInjector.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['smartExtract.js'] });
+    }
+
+    // Получаем настройки Smart Extract
+    const smartSettings = await new Promise(resolve => {
+      chrome.storage.local.get(['smartExtractSettings'], result => {
+        resolve(result.smartExtractSettings || {});
+      });
+    });
+
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: (mode, extract) => {
+      func: (mode, extract, smartOpts) => {
         // Initialize namespace
         window.__NINJA_SNATCH__ = window.__NINJA_SNATCH__ || {};
         window.__NINJA_SNATCH__.snatcherMode = mode;
         window.__NINJA_SNATCH__.snatcherExtractMode = extract;
+        window.__NINJA_SNATCH__.smartExtractSettings = smartOpts;
         // Legacy compatibility
         window.snatcherMode = mode;
         window.snatcherExtractMode = extract;
       },
-      args: [outputMode, extractMode]
+      args: [outputMode, extractMode, smartSettings]
     });
 
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['selector.js'] });
@@ -132,10 +204,12 @@ document.getElementById("stealPageBtn").addEventListener("click", async () => {
     return;
   }
 
-  showStatus("Извлекаем страницу...");
+  const isSmart = extractMode === 'smart';
 
   try {
-    // Инжектируем config.js и styleInjector для prettify и стилей
+    // Step 1: Inject base scripts
+    showStatus(isSmart ? "⏳ Загрузка модулей..." : "Извлекаем страницу...");
+
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ['config.js']
@@ -145,18 +219,44 @@ document.getElementById("stealPageBtn").addEventListener("click", async () => {
       files: ['styleInjector.js']
     });
 
+    // Step 2: Inject Smart StyleInjector + Extract if needed
+    if (isSmart) {
+      showStatus("⏳ Инициализация Smart Extract...");
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['smartStyleInjector.js']
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['smartExtract.js']
+      });
+    }
+
+    // Step 3: Get settings
+    const smartSettings = await new Promise(resolve => {
+      chrome.storage.local.get(['smartExtractSettings'], result => {
+        resolve(result.smartExtractSettings || {});
+      });
+    });
+
+    // Step 4: Extract content
+    showStatus(isSmart ? "⏳ Анализ структуры страницы..." : "Извлекаем...");
+
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: extractPageContent,
-      args: [extractMode]
+      args: [extractMode, smartSettings]
     });
 
     if (!results?.[0]?.result) {
       throw new Error("Не удалось получить данные");
     }
 
-    const { html, title } = results[0].result;
-    await handleOutput(html, title, 'page');
+    // Step 5: Handle output
+    showStatus(isSmart ? "⏳ Генерация кода..." : "Сохранение...");
+
+    const { html, title, ext } = results[0].result;
+    await handleOutput(html, title, 'page', ext);
   } catch (err) {
     showError(err.message);
   }
@@ -172,15 +272,18 @@ function isRestrictedPage(url) {
     url.startsWith('edge://');
 }
 
-async function handleOutput(content, title, suffix) {
+async function handleOutput(content, title, suffix, fileExt = 'html') {
   const sanitizedTitle = title.replace(/[^a-z0-9а-яё]/gi, '_').substring(0, 30) || 'snatched';
-  const styleSuffix = extractMode === 'styled' ? '_styled' : '';
-  const filename = `${sanitizedTitle}_${suffix}${styleSuffix}.html`;
+  const modeSuffix = extractMode === 'smart' ? '_smart' : (extractMode === 'styled' ? '_styled' : '');
+  const ext = extractMode === 'smart' ? fileExt : 'html';
+  const filename = `${sanitizedTitle}_${suffix}${modeSuffix}.${ext}`;
 
   if (outputMode === 'copy') {
     try {
       await navigator.clipboard.writeText(content);
-      const msg = extractMode === 'styled' ? "Со стилями скопировано! 🎨" : "Скопировано! 📋";
+      const msg = extractMode === 'smart'
+        ? "Smart Extract скопирован! ✨"
+        : (extractMode === 'styled' ? "Со стилями скопировано! 🎨" : "Скопировано! 📋");
       showSuccess(msg);
     } catch (err) {
       showError("Ошибка буфера обмена");
@@ -191,7 +294,9 @@ async function handleOutput(content, title, suffix) {
       data: { content, filename }
     }, (response) => {
       if (response?.success) {
-        const msg = extractMode === 'styled' ? "Файл со стилями сохранён! 🎨" : "Файл сохранён! 💾";
+        const msg = extractMode === 'smart'
+          ? "Smart Extract сохранён! ✨"
+          : (extractMode === 'styled' ? "Файл со стилями сохранён! 🎨" : "Файл сохранён! 💾");
         showSuccess(msg);
       } else {
         showError(response?.error || "Ошибка скачивания");
@@ -257,7 +362,7 @@ function extractIframeContent() {
   return { html: null, title: null, found: false };
 }
 
-function extractPageContent(mode) {
+async function extractPageContent(mode, smartSettings = {}) {
   function getFullHTML(doc) {
     const doctype = doc.doctype
       ? new XMLSerializer().serializeToString(doc.doctype)
@@ -266,8 +371,27 @@ function extractPageContent(mode) {
   }
 
   let html;
+  let ext = 'html';
 
-  if (mode === 'styled' && window.StyleInjector) {
+  // Smart Extract mode
+  if (mode === 'smart' && window.__NINJA_SNATCH__?.SmartExtract) {
+    try {
+      const SmartExtract = window.__NINJA_SNATCH__.SmartExtract;
+      const result = await SmartExtract.process(document.body, {
+        enableAI: smartSettings.enableAI || false,
+        apiKey: smartSettings.apiKey || null
+      });
+
+      html = result.code;
+      ext = 'html'; // Smart Extract v2 always outputs HTML
+
+      console.log('[SmartExtract] Page extraction complete:', result.metadata);
+    } catch (err) {
+      console.error('[SmartExtract] Error:', err);
+      // Fallback to clean HTML
+      html = getFullHTML(document);
+    }
+  } else if (mode === 'styled' && window.StyleInjector) {
     html = window.StyleInjector.createStyledDocument(document.documentElement, document.title);
   } else {
     // Raw HTML - тоже форматируем if prettifier available
@@ -279,6 +403,7 @@ function extractPageContent(mode) {
 
   return {
     html,
-    title: document.title
+    title: document.title,
+    ext
   };
 }

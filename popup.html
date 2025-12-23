@@ -50,6 +50,32 @@
           <span class="radio-check"></span>
           <span>Compact <span class="beta-badge">📦</span></span>
         </label>
+        <label class="radio-option">
+          <input type="radio" name="extractMode" value="smart">
+          <span class="radio-check"></span>
+          <span>Smart Extract <span class="beta-badge">✨</span></span>
+        </label>
+      </div>
+
+      <!-- Smart Extract Settings -->
+      <div id="smartSettings" class="smart-settings hidden">
+        <div class="setting-row">
+          <label for="targetFormat">Формат</label>
+          <select id="targetFormat" class="select-field">
+            <option value="react-tailwind">React + Tailwind</option>
+            <option value="html-tailwind">HTML + Tailwind</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="enableAI">
+            <span>AI Enhancement</span>
+          </label>
+        </div>
+        <div id="apiKeySection" class="setting-row hidden">
+          <label for="apiKey">OpenRouter API Key</label>
+          <input type="password" id="apiKey" class="input-field" placeholder="sk-or-v1-...">
+        </div>
       </div>
 
       <div class="btn-group">

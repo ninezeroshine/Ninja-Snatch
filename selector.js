@@ -81,16 +81,64 @@
         }
 
         async snatch(el) {
-            const outputMode = window.snatcherMode || 'copy';
-            const extractMode = window.snatcherExtractMode || 'clean';
+            const outputMode = window.__NINJA_SNATCH__?.snatcherMode || window.snatcherMode || 'copy';
+            const extractMode = window.__NINJA_SNATCH__?.snatcherExtractMode || window.snatcherExtractMode || 'clean';
+            const smartSettings = window.__NINJA_SNATCH__?.smartExtractSettings || {};
             const useStyles = extractMode === 'styled';
-            const useCompact = extractMode === 'compact' || extractMode === 'llm'; // Support both names
+            const useCompact = extractMode === 'compact' || extractMode === 'llm';
+            const useSmart = extractMode === 'smart';
+
+            // Debug logging
+            console.log('[Snatcher] Mode detection:', {
+                outputMode,
+                extractMode,
+                useSmart,
+                smartExtractAvailable: !!window.__NINJA_SNATCH__?.SmartExtract,
+                smartSettings
+            });
 
             try {
                 let html;
                 let fullDoc;
 
-                if (useCompact && window.StyleInjector) {
+                if (useSmart && window.__NINJA_SNATCH__?.SmartExtract) {
+                    // Smart Extract mode - use new pipeline
+                    const SmartExtract = window.__NINJA_SNATCH__.SmartExtract;
+
+                    this.showToast('Обработка Smart Extract...', 'success');
+
+                    const result = await SmartExtract.process(el, {
+                        format: smartSettings.format || 'react-tailwind',
+                        enableAI: smartSettings.enableAI || false,
+                        apiKey: smartSettings.apiKey || null
+                    });
+
+                    html = result.code;
+
+                    // For download, wrap in appropriate document
+                    const isReact = (smartSettings.format || 'react-tailwind').includes('react');
+                    const ext = isReact ? 'jsx' : 'html';
+
+                    if (isReact) {
+                        fullDoc = result.code;
+                    } else {
+                        fullDoc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smart Extract - ${el.tagName}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+${result.code}
+</body>
+</html>`;
+                    }
+
+                    // Log metadata
+                    console.log('[SmartExtract] Extraction complete:', result.metadata);
+
+                } else if (useCompact && window.StyleInjector) {
                     // Compact mode - clean output for Tailwind/Webflow
                     html = window.StyleInjector.createCompactExport
                         ? window.StyleInjector.createCompactExport(el)
@@ -116,13 +164,16 @@
 
                 if (outputMode === 'copy') {
                     await navigator.clipboard.writeText(html);
-                    const msg = useCompact ? 'Compact код скопирован! 📦' : (useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋');
+                    const msg = useSmart
+                        ? 'Smart Extract скопирован! ✨'
+                        : (useCompact ? 'Compact код скопирован! 📦' : (useStyles ? 'Код со стилями скопирован! 🎨' : 'Код скопирован в буфер! 📋'));
                     this.showToast(msg, 'success');
                 } else {
                     // Используем background script для скачивания
                     const title = (el.tagName + '_' + (el.id || el.className || 'element')).substring(0, 30);
-                    const modeSuffix = useCompact ? '_compact' : (useStyles ? '_styled' : '');
-                    const filename = title.replace(/[^a-z0-9]/gi, '_') + modeSuffix + '.html';
+                    const modeSuffix = useSmart ? '_smart' : (useCompact ? '_compact' : (useStyles ? '_styled' : ''));
+                    const ext = useSmart && (smartSettings.format || '').includes('react') ? 'jsx' : 'html';
+                    const filename = title.replace(/[^a-z0-9]/gi, '_') + modeSuffix + '.' + ext;
 
                     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
                         chrome.runtime.sendMessage({
@@ -130,7 +181,9 @@
                             data: { content: fullDoc, filename }
                         }, (response) => {
                             if (response && response.success) {
-                                const msg = useCompact ? 'Compact файл сохранён! 📦' : (useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾');
+                                const msg = useSmart
+                                    ? 'Smart Extract сохранён! ✨'
+                                    : (useCompact ? 'Compact файл сохранён! 📦' : (useStyles ? 'Файл со стилями сохранён! 🎨' : 'Файл сохранён! 💾'));
                                 this.showToast(msg, 'success');
                             } else {
                                 // Fallback к прямому скачиванию
