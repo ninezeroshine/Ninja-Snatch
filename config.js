@@ -1,5 +1,5 @@
 /**
- * Ninja-Snatch Configuration v9.0
+ * Ninja-Snatch Configuration v10.0
  * Centralized settings and platform patterns
  * 
  * This file contains all configurable patterns for:

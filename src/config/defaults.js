@@ -4,7 +4,7 @@
  * @module config/defaults
  */
 
-export const VERSION = '9.0.0';
+export const VERSION = '10.0.0';
 
 export const DEFAULTS = {
     /** Debug mode - enables verbose logging */

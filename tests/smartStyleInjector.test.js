@@ -44,8 +44,8 @@ describe('SmartStyleInjector', () => {
             expect(typeof SmartStyleInjector).toBe('object');
         });
 
-        test('should have version 9.0.0', () => {
-            expect(SmartStyleInjector.version).toBe('9.0.0');
+        test('should have version 10.0.0', () => {
+            expect(SmartStyleInjector.version).toBe('10.0.0');
         });
 
         test('should have core functions', () => {

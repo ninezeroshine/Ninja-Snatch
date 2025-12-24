@@ -72,19 +72,10 @@
 *   **Regex Policy:** При изменении regex для очистки классов — проверяй на false-positives.
 *   Новую логику добавлять в соответствующую секцию, не в `init()`.
 
-### Smart Extract (`smartExtract.js` + `smartStyleInjector.js`)
-*   Новый модуль v10.0 для умного извлечения.
-*   `smartStyleInjector.js` — копия `styleInjector.js` для изоляции.
-*   `smartExtract.js` — pipeline с распознаванием фреймворков и AI.
-*   **Framework Detection:** React, Vue, Tailwind, Webflow, Framer, Angular, Svelte.
-*   **AI Enhancement:** OpenRouter API (`google/gemini-2.0-flash-001`).
-*   **Важно:** Tailwind классы не очищаются! Хеши CSS-modules — да.
-
 ### UI (`popup.js` / `selector.js`)
 *   `chrome.storage.local` для сохранения состояния UI между сессиями.
 *   Visual Sniper: `z-index: 2147483647` (максимум).
 *   Toast-уведомления с spring-анимацией.
-*   **Smart Settings:** Формат вывода, AI toggle, API key.
 
 ### Config (`config.js`)
 *   Все паттерны (домены, селекторы, regex) вынесены сюда.

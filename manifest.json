@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Ninja Snatch",
-  "version": "9.0",
-  "description": "Extract complete HTML with CSS and animations. Modular architecture v9.0.",
+  "version": "10.0",
+  "description": "Extract complete HTML with CSS and animations. Smart Extract v10.0.",
   "permissions": [
     "activeTab",
     "scripting",

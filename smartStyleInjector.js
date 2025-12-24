@@ -1,5 +1,5 @@
 /**
- * Ninja-Snatch SmartStyleInjector v9.0
+ * Ninja-Snatch SmartStyleInjector v10.0
  * 
  * IDENTICAL COPY of StyleInjector for future improvements.
  * This is used for "Smart Extract" mode in the extension.
@@ -24,7 +24,7 @@ if (typeof window.__NINJA_SNATCH__.SmartStyleInjector !== 'undefined') {
         // CONFIG
         // ═══════════════════════════════════════════════════════════════
 
-        const VERSION = '9.0.0';
+        const VERSION = '10.0.0';
 
         const DEFAULTS = {
             debug: false,

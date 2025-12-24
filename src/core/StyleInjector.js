@@ -1,5 +1,5 @@
 /**
- * Ninja-Snatch Style Injector v9.0
+ * Ninja-Snatch Style Injector v10.0
  * 
  * Refactored modular architecture:
  * - Config-driven with centralized settings

@@ -1,5 +1,5 @@
 /**
- * Ninja-Snatch v9.0
+ * Ninja-Snatch v10.0
  * 
  * Modular website content extraction tool
  * Extracts HTML with all CSS and animations preserved

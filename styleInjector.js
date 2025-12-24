@@ -1,5 +1,5 @@
 /**
- * Ninja-Snatch Browser Bundle v9.0
+ * Ninja-Snatch Browser Bundle v10.0
  * 
  * Self-contained IIFE for browser extension compatibility.
  * This is used by popup.js and selector.js which run as content scripts.
@@ -25,7 +25,7 @@ if (typeof window.__NINJA_SNATCH__.StyleInjector !== 'undefined') {
         // CONFIG
         // ═══════════════════════════════════════════════════════════════
 
-        const VERSION = '9.0.0';
+        const VERSION = '10.0.0';
 
         const DEFAULTS = {
             debug: false,

@@ -4,7 +4,7 @@
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)
-![Version](https://img.shields.io/badge/Version-9.0-blue)
+![Version](https://img.shields.io/badge/Version-10.0-blue)
 ![Vanilla JS](https://img.shields.io/badge/Vanilla-JS-F7DF1E?logo=javascript&logoColor=black)
 
 ---
@@ -30,12 +30,19 @@
 - Motion.dev инъекция для динамических эффектов
 - Детекция и восстановление кастомных курсоров
 
+### ✨ Smart Extract (NEW v10.0)
+- **Автодетекция фреймворка** — React, Vue, Tailwind, Webflow, Framer
+- **Оптимизация стилей** — замена inline-стилей на классы, очистка CSS-module хешей
+- **Форматы вывода** — React + Tailwind, HTML + Tailwind
+- **AI Enhancement** — улучшение кода с помощью LLM (OpenRouter API)
+
 ### 📦 Режимы экспорта
 | Режим | Описание |
 |-------|----------|
 | **Чистый HTML** | Сырой HTML без стилей |
 | **Со стилями** | HTML + все CSS в `<style>` блоке |
 | **Compact** | Минифицированный вывод (Tailwind/Webflow) |
+| **Smart Extract** ✨ | Умное извлечение с распознаванием паттернов |
 
 ---
 
@@ -56,14 +63,16 @@ git clone https://github.com/youruser/ninja-snatch.git
 
 ```
 Ninja-Snatch/
-├── manifest.json        # Manifest V3 конфигурация
-├── popup.html/js/css    # UI расширения
-├── styleInjector.js     # Ядро — сбор CSS, обработка HTML (1040 строк)
-├── selector.js          # Visual Sniper (209 строк)
-├── config.js            # Централизованные паттерны (252 строки)
-├── background.js        # Service worker для downloads
-├── utils.js             # Вспомогательные функции
-└── tests/               # Jest тесты
+├── manifest.json          # Manifest V3 конфигурация
+├── popup.html/js/css      # UI расширения
+├── styleInjector.js       # Ядро — сбор CSS, обработка HTML
+├── smartStyleInjector.js  # Smart Extract CSS модуль
+├── smartExtract.js        # Smart Extract v2 — AI pipeline
+├── selector.js            # Visual Sniper
+├── config.js              # Централизованные паттерны
+├── background.js          # Service worker для downloads
+├── utils.js               # Вспомогательные функции
+└── tests/                 # Jest тесты
 ```
 
 ### Ключевые методы (`styleInjector.js`)
@@ -127,6 +136,14 @@ npm test
 ---
 
 ## 📝 Changelog
+
+### v10.0 (2025-12-24)
+- ✨ **Smart Extract** — новый режим извлечения с AI-улучшением
+- 🧠 Автодетекция фреймворка (React, Vue, Tailwind, Webflow, Framer)
+- 🔄 Замена inline-стилей на классы
+- 🧹 Очистка CSS-module хешей
+- 🤖 Опциональное AI Enhancement через OpenRouter API
+- 📦 Новые форматы: React + Tailwind, HTML + Tailwind
 
 ### v9.0 (2025-12-23)
 - 🆕 Scroll-trigger детекция (AOS, Locomotive, Webflow)

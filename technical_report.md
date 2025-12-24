@@ -1,7 +1,7 @@
-# Технический Отчёт: Ninja-Snatch v9.0
+# Технический Отчёт: Ninja-Snatch v10.0
 
-> **Дата:** 2025-12-23  
-> **Версия:** 9.0  
+> **Дата:** 2025-12-24  
+> **Версия:** 10.0  
 > **Платформа:** Chrome Extension (Manifest V3)
 
 ---
@@ -20,15 +20,17 @@
 
 | Файл | Строк кода | Назначение |
 |------|------------|------------|
-| `styleInjector.js` | 1040 | Ядро — сбор CSS, обработка HTML, генерация анимаций |
-| `popup.js` | 280 | UI логика popup меню |
+| `styleInjector.js` | 1050 | Ядро — сбор CSS, обработка HTML, генерация анимаций |
+| `smartStyleInjector.js` | 1050 | Smart Extract CSS модуль (копия StyleInjector) |
+| `smartExtract.js` | 694 | Smart Extract v2 — AI pipeline, распознавание паттернов |
+| `popup.js` | 410 | UI логика popup меню |
 | `config.js` | 252 | Централизованная конфигурация паттернов |
 | `popup.css` | 241 | Стили popup |
 | `selector.js` | 209 | Visual Sniper — интерактивный выбор элементов |
 | `utils.js` | 84 | Вспомогательные функции |
 | `background.js` | 58 | Service worker для downloads |
 | `selector.css` | 50 | Стили overlay |
-| **Итого** | ~2,300 | — |
+| **Итого** | ~4,100 | — |
 
 ---
 
@@ -37,15 +39,17 @@
 ### Структура проекта
 ```
 Ninja-Snatch/
-├── manifest.json           # Manifest V3 конфигурация
-├── popup.html/js/css       # UI расширения
-├── styleInjector.js        # Ядро извлечения
-├── selector.js             # Visual Sniper
-├── config.js               # Паттерны и настройки
-├── background.js           # Service worker
-├── utils.js                # Утилиты
-├── tests/                  # Jest тесты
-└── src/                    # Модульная структура (в разработке)
+├── manifest.json             # Manifest V3 конфигурация
+├── popup.html/js/css         # UI расширения
+├── styleInjector.js          # Ядро извлечения
+├── smartStyleInjector.js     # Smart Extract CSS модуль
+├── smartExtract.js           # Smart Extract v2 — AI pipeline
+├── selector.js               # Visual Sniper
+├── config.js                 # Паттерны и настройки
+├── background.js             # Service worker
+├── utils.js                  # Утилиты
+├── tests/                    # Jest тесты
+└── src/                      # Модульная структура (в разработке)
 ```
 
 ### Data Flow
@@ -54,12 +58,25 @@ popup.js → chrome.scripting.executeScript()
               ↓
          [config.js + styleInjector.js + selector.js]
               ↓
-         styleInjector._prepareExport(element)
-         ├── collectAllCSS()
-         ├── cleanHTML()
-         ├── fixHTMLUrls()
-         ├── getMatchedCSSRules()
-         └── generateRevealAnimationsCSS()
+         ┌─────────────────────────────────────────────┐
+         │ Режим: styled/clean                         │
+         │ styleInjector._prepareExport(element)       │
+         │ ├── collectAllCSS()                         │
+         │ ├── cleanHTML()                             │
+         │ ├── fixHTMLUrls()                           │
+         │ └── generateRevealAnimationsCSS()           │
+         └─────────────────────────────────────────────┘
+              ↓
+         ┌─────────────────────────────────────────────┐
+         │ Режим: smart                                │
+         │ SmartExtract.process(element)               │
+         │ ├── detectFramework()                       │
+         │ ├── findRepeatingPatterns()                 │
+         │ ├── extractInlineStyles()                   │
+         │ ├── groupDuplicateStyles()                  │
+         │ ├── cleanCSSModuleHashes()                  │
+         │ └── enhanceWithAI() [optional]              │
+         └─────────────────────────────────────────────┘
               ↓
          [Clipboard / Download via background.js]
 ```
@@ -106,6 +123,37 @@ popup.js → chrome.scripting.executeScript()
 - Очистка CSS-module хэшей
 - Дедупликация повторяющихся элементов
 - Упрощение вложенных `<div>` структур
+
+### Smart Extract v2.0 (NEW)
+Умное извлечение с распознаванием паттернов и опциональным AI-улучшением.
+
+#### Архитектура
+```
+SmartExtract.process(element)
+├── detectFramework()          → Определяет React/Vue/Tailwind/Webflow/Framer
+├── findRepeatingPatterns()    → Находит повторяющиеся структуры
+├── extractInlineStyles()      → Собирает inline стили
+├── groupDuplicateStyles()     → Генерирует классы из дубликатов
+├── cleanCSSModuleHashes()     → Удаляет хеши, сохраняет Tailwind
+├── formatHTML()               → Читаемое форматирование
+└── enhanceWithAI() [optional] → LLM-улучшение через OpenRouter
+```
+
+#### Настройки UI
+| Опция | Описание |
+|-------|----------|
+| **Формат** | React + Tailwind / HTML + Tailwind |
+| **AI Enhancement** | Включить улучшение через OpenRouter API |
+| **API Key** | OpenRouter ключ (sk-or-v1-...) |
+
+#### Поддерживаемые фреймворки
+- **React/Next.js** — классы с `__`, `_`, хеши
+- **Vue/Nuxt** — `data-v-` префиксы
+- **Tailwind CSS** — utility-классы сохраняются!
+- **Webflow** — `w-`, `wf-` классы
+- **Framer** — `framer-`, `__framer` атрибуты
+- **Angular** — `ng-`, `_ngcontent`
+- **Svelte** — `svelte-` префиксы
 
 ---
 
@@ -204,16 +252,19 @@ popup.js → chrome.scripting.executeScript()
 
 ## 8. Roadmap
 
-### Фаза 3: Стабильность
-- [ ] Namespace `window.__NINJA_SNATCH__`
+### Фаза 3: Стабильность ✅ (завершена v10.0)
+- [x] Namespace `window.__NINJA_SNATCH__`
+- [x] Переименование LLM → Compact Export
+- [x] Smart Extract v2.0 с AI Enhancement
 - [ ] Тесты для `selector.js`
-- [ ] Переименование LLM → Compact Export
 - [ ] Debug mode toggle
 
-### Фаза 4: Улучшения (опционально)
+### Фаза 4: Улучшения (в планах)
 - [ ] Fonts base64 encoding (offline mode)
 - [ ] Asset Downloader (ZIP с картинками)
 - [ ] Расширенная детекция CSS-in-JS
+- [ ] React component export (JSX)
+- [ ] Vue SFC export (.vue)
 
 ---
 
@@ -234,11 +285,12 @@ popup.js → chrome.scripting.executeScript()
 
 ## 10. Заключение
 
-Ninja Snatch v9.0 — рабочий инструмент с типичным техническим долгом. Основной функционал реализован и работает. Приоритетные улучшения:
-1. Изоляция глобальных переменных
-2. Расширение тестового покрытия
-3. Честное название функций
+Ninja Snatch v10.0 — мощный инструмент для извлечения веб-контента с новейшим Smart Extract режимом. Основные достижения:
+1. ✅ Изоляция глобальных переменных (`window.__NINJA_SNATCH__`)
+2. ✅ Smart Extract v2.0 с AI Enhancement
+3. ✅ Автодетекция фреймворков
+4. ⏳ Расширение тестового покрытия (в процессе)
 
 ---
 
-*Документ обновлён: 2025-12-23*
+*Документ обновлён: 2025-12-24*
