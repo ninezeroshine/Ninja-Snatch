@@ -116,6 +116,20 @@ popup.js → chrome.scripting.executeScript()
 - **Motion.dev инъекция:** reveal скрытых элементов, counter анимации
 - **Custom cursor:** детекция и инициализация
 
+### Animation Extraction Engine (NEW v10.0)
+> Использует [Web Animations API](https://developer.mozilla.org/en-US/docs/Web/API/Element/getAnimations) для точного извлечения CSS-анимаций
+
+- **`extractRealAnimations(element)`** — извлекает все CSS-анимации через `element.getAnimations()`
+- **`generateKeyframesCSS()`** — генерирует точные `@keyframes` правила из keyframe data
+- **Данные анимаций:**
+  - Keyframes с offset, easing, properties
+  - Timing: duration, delay, iterations, direction, fill
+- **Ограничение:** Не работает для JS-анимаций (GSAP, Framer Motion, Anime.js) — они используют requestAnimationFrame
+
+### AI Prompt Enhancement (v10.0)
+- Контекст извлечённых keyframes передаётся в AI промпт
+- AI знает точные параметры анимаций и сохраняет их при semantic naming
+
 ### Compact Export (ранее "LLM Export")
 > ⚠️ **Ограничение:** Работает корректно только для Tailwind/Webflow. Не универсален.
 

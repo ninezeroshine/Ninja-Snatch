@@ -504,6 +504,218 @@ if (typeof window.__NINJA_SNATCH__.SmartStyleInjector !== 'undefined') {
         };
 
         // ═══════════════════════════════════════════════════════════════
+        // ANIMATION EXTRACTION ENGINE (NEW v10.0)
+        // Uses Web Animations API for precise animation capture
+        // Docs: https://developer.mozilla.org/en-US/docs/Web/API/Element/getAnimations
+        // ═══════════════════════════════════════════════════════════════
+
+        /**
+         * Extract real CSS animations from an element using Web Animations API
+         * @param {HTMLElement} element - Root element to analyze
+         * @returns {Object} { animations: Array, generatedCSS: string }
+         */
+        const extractRealAnimations = (element) => {
+            const extractedAnimations = [];
+            const generatedKeyframes = new Map();
+            let animationCounter = 0;
+
+            const traverse = (el) => {
+                if (!el || typeof el.getAnimations !== 'function') return;
+
+                try {
+                    const animations = el.getAnimations({ subtree: false });
+
+                    for (const anim of animations) {
+                        const effect = anim.effect;
+                        if (!effect || typeof effect.getKeyframes !== 'function') continue;
+
+                        try {
+                            const keyframes = effect.getKeyframes();
+                            const timing = effect.getTiming ? effect.getTiming() : {};
+                            const computedTiming = effect.getComputedTiming ? effect.getComputedTiming() : {};
+
+                            if (!keyframes || keyframes.length === 0) continue;
+
+                            animationCounter++;
+                            const animName = `snatch-extracted-${animationCounter}`;
+                            const elId = el.id || el.className?.split?.(' ')?.[0] || el.tagName.toLowerCase();
+
+                            const animData = {
+                                name: animName,
+                                elementId: elId,
+                                keyframes: keyframes.map(kf => ({
+                                    offset: kf.offset,
+                                    easing: kf.easing,
+                                    composite: kf.composite,
+                                    properties: Object.keys(kf).filter(k =>
+                                        !['offset', 'easing', 'composite', 'computedOffset'].includes(k)
+                                    ).reduce((obj, key) => {
+                                        obj[key] = kf[key];
+                                        return obj;
+                                    }, {})
+                                })),
+                                timing: {
+                                    duration: timing.duration || computedTiming.duration || 0,
+                                    delay: timing.delay || 0,
+                                    iterations: timing.iterations || 1,
+                                    direction: timing.direction || 'normal',
+                                    easing: timing.easing || 'linear',
+                                    fill: timing.fill || 'none'
+                                }
+                            };
+
+                            extractedAnimations.push(animData);
+
+                            const keyframesCSS = generateKeyframesCSS(animName, keyframes);
+                            if (!generatedKeyframes.has(keyframesCSS)) {
+                                generatedKeyframes.set(keyframesCSS, animName);
+                            }
+
+                            _log('info', `Extracted animation "${animName}" from <${elId}>, ${keyframes.length} keyframes`);
+                        } catch (e) {
+                            _log('warn', `Could not extract animation data: ${e.message}`);
+                        }
+                    }
+                } catch (e) { }
+
+                for (const child of el.children) {
+                    traverse(child);
+                }
+            };
+
+            traverse(element);
+
+            const cssOutput = Array.from(generatedKeyframes.keys()).join('\n\n');
+
+            _log('info', `Extracted ${extractedAnimations.length} real animations, generated ${generatedKeyframes.size} @keyframes`);
+
+            return {
+                animations: extractedAnimations,
+                generatedCSS: cssOutput,
+                count: extractedAnimations.length
+            };
+        };
+
+        const generateKeyframesCSS = (name, keyframes) => {
+            const frames = keyframes.map(kf => {
+                const offset = kf.offset !== undefined ? Math.round(kf.offset * 100) : null;
+                if (offset === null) return '';
+
+                const props = Object.keys(kf)
+                    .filter(k => !['offset', 'easing', 'composite', 'computedOffset'].includes(k))
+                    .map(k => {
+                        const kebabKey = k.replace(/([A-Z])/g, '-$1').toLowerCase();
+                        return `${kebabKey}: ${kf[k]}`;
+                    })
+                    .join('; ');
+
+                if (!props) return '';
+
+                const label = offset === 0 ? 'from' : offset === 100 ? 'to' : `${offset}%`;
+                return `    ${label} { ${props}; }`;
+            }).filter(f => f).join('\n');
+
+            if (!frames) return '';
+
+            return `@keyframes ${name} {\n${frames}\n}`;
+        };
+
+        /**
+         * Analyze animations in element tree (for AI context)
+         * @param {HTMLElement} element
+         * @returns {Array} Animation analysis data
+         */
+        const analyzeAnimations = (element) => {
+            const result = [];
+
+            const traverse = (el) => {
+                if (!el) return;
+
+                try {
+                    const computed = getComputedStyle(el);
+                    const animName = computed.animationName;
+                    const animDuration = computed.animationDuration;
+
+                    if (animName && animName !== 'none') {
+                        result.push({
+                            type: 'css-animation',
+                            trigger: 'auto',
+                            name: animName,
+                            duration: parseFloat(animDuration) * 1000 || 0,
+                            element: el.tagName.toLowerCase() + (el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ')[0]}` : '')
+                        });
+                    }
+
+                    const transition = computed.transition;
+                    if (transition && transition !== 'none' && transition !== 'all 0s ease 0s') {
+                        result.push({
+                            type: 'css-transition',
+                            trigger: 'hover/interaction',
+                            properties: transition,
+                            element: el.tagName.toLowerCase()
+                        });
+                    }
+
+                    const transform = computed.transform;
+                    const opacity = computed.opacity;
+                    if ((transform && transform !== 'none') || (opacity && parseFloat(opacity) < 1)) {
+                        const style = el.getAttribute('style') || '';
+                        if (style.includes('translateY') || style.includes('translateX') || style.includes('opacity')) {
+                            result.push({
+                                type: 'scroll-animation',
+                                trigger: 'scroll',
+                                from: { transform, opacity },
+                                element: el.tagName.toLowerCase()
+                            });
+                        }
+                    }
+                } catch (e) { }
+
+                for (const child of el.children) {
+                    traverse(child);
+                }
+            };
+
+            traverse(element);
+            return result;
+        };
+
+        /**
+         * Analyze marquee/ticker elements
+         * @param {HTMLElement} element
+         * @returns {Array} Marquee data
+         */
+        const analyzeMarquees = (element) => {
+            const result = [];
+            const selectors = [
+                '[class*="marquee"]',
+                '[class*="ticker"]',
+                '[class*="scroll-text"]',
+                '.whitespace-nowrap'
+            ];
+
+            selectors.forEach(sel => {
+                try {
+                    element.querySelectorAll(sel).forEach(el => {
+                        const children = el.children;
+                        if (children.length >= 3) {
+                            const items = Array.from(children).slice(0, 5).map(c => c.textContent?.trim()?.substring(0, 20));
+                            const computed = getComputedStyle(el);
+
+                            result.push({
+                                direction: computed.animationDirection === 'reverse' ? 'right' : 'left',
+                                duration: parseFloat(computed.animationDuration) * 1000 || DEFAULTS.durations.marquee,
+                                items: items.filter(i => i)
+                            });
+                        }
+                    });
+                } catch (e) { }
+            });
+
+            return result;
+        };
+
+        // ═══════════════════════════════════════════════════════════════
         // ANIMATION GENERATION
         // ═══════════════════════════════════════════════════════════════
 
@@ -1039,6 +1251,11 @@ ${generateCursorScript()}
             prettifyHTML,
             generateRevealAnimations: generateRevealAnimationsCSS,
             fixRelativeURLs(cssText) { return fixCSSUrls(cssText, pageOrigin); },
+
+            // NEW v10.0: Animation Extraction Engine
+            extractRealAnimations,
+            analyzeAnimations,
+            analyzeMarquees,
 
             // Legacy compatibility - state (for tests)
             get pageOrigin() { return pageOrigin; },

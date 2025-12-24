@@ -368,6 +368,7 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
 
         /**
          * Generates rich AI prompt with extraction context
+         * Updated v10.0: Now includes extracted keyframes data from Web Animations API
          * @param {string} html - HTML to enhance
          * @param {Object} context - Extraction context from SmartStyleInjector
          * @returns {string}
@@ -379,15 +380,32 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
 1. Переименуй классы snatch-* в семантические имена (hero-section, nav-menu, card-grid)
 2. Сгруппируй похожие CSS правила
 3. Добавь комментарии к основным секциям
-4. НЕ МЕНЯЙ функциональность и стили
+4. Сохрани ВСЕ анимации — особенно @keyframes правила
+5. НЕ МЕНЯЙ функциональность и стили
 
 `;
 
-            // Add animation context if available
+            // NEW v10.0: Add extracted keyframes info
+            if (context.extractedAnimations && context.extractedAnimations.count > 0) {
+                prompt += `## 🎬 Извлечённые CSS-анимации (Web Animations API) — ${context.extractedAnimations.count}:\n`;
+                context.extractedAnimations.animations.slice(0, 8).forEach((anim, i) => {
+                    prompt += `${i + 1}. "${anim.name}" на элементе <${anim.elementId}>\n`;
+                    prompt += `   ⏱ Длительность: ${anim.timing.duration}ms, easing: ${anim.timing.easing}\n`;
+                    prompt += `   🔁 Итерации: ${anim.timing.iterations}, направление: ${anim.timing.direction}\n`;
+                    if (anim.keyframes && anim.keyframes.length > 0) {
+                        const firstKf = anim.keyframes[0];
+                        const lastKf = anim.keyframes[anim.keyframes.length - 1];
+                        prompt += `   📍 Keyframes: ${anim.keyframes.length} (from: ${Object.keys(firstKf.properties).join(', ')} → to: ${Object.keys(lastKf.properties).join(', ')})\n`;
+                    }
+                });
+                prompt += `\n⚠️ ЭТИ АНИМАЦИИ УЖЕ ВКЛЮЧЕНЫ В HTML. Не удаляй их @keyframes правила!\n\n`;
+            }
+
+            // Add animation context if available (legacy format)
             if (context.animations && context.animations.length > 0) {
-                prompt += `## Найденные анимации (${context.animations.length}):\n`;
+                prompt += `## Найденные CSS-анимации (${context.animations.length}):\n`;
                 context.animations.slice(0, 5).forEach((anim, i) => {
-                    prompt += `${i + 1}. ${anim.type} (trigger: ${anim.trigger}, duration: ${anim.duration}ms)\n`;
+                    prompt += `${i + 1}. ${anim.type}: "${anim.name || 'anonymous'}" (trigger: ${anim.trigger}, duration: ${anim.duration}ms)\n`;
                     if (anim.from && Object.keys(anim.from).length > 0) {
                         prompt += `   From: ${JSON.stringify(anim.from)}\n`;
                     }
@@ -397,7 +415,7 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
 
             // Add cursor context if available
             if (context.cursors && context.cursors.length > 0) {
-                prompt += `## Кастомные курсоры (${context.cursors.length}):\n`;
+                prompt += `## 🖱 Кастомные курсоры (${context.cursors.length}):\n`;
                 context.cursors.forEach((cursor, i) => {
                     prompt += `${i + 1}. ${cursor.type}\n`;
                     if (cursor.styles) {
@@ -412,7 +430,7 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
 
             // Add counter context if available
             if (context.counters && context.counters.length > 0) {
-                prompt += `## Анимированные счётчики (${context.counters.length}):\n`;
+                prompt += `## 🔢 Анимированные счётчики (${context.counters.length}):\n`;
                 context.counters.forEach((counter, i) => {
                     prompt += `${i + 1}. Цель: ${counter.target || counter.targetValue || 0}${counter.suffix || ''}\n`;
                 });
@@ -421,7 +439,7 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
 
             // Add marquee context if available
             if (context.marquees && context.marquees.length > 0) {
-                prompt += `## Бегущие строки (${context.marquees.length}):\n`;
+                prompt += `## 📜 Бегущие строки (${context.marquees.length}):\n`;
                 context.marquees.forEach((marquee, i) => {
                     prompt += `${i + 1}. Направление: ${marquee.direction || 'left'}, Длительность: ${marquee.duration || 25000}ms\n`;
                     if (marquee.items && marquee.items.length > 0) {
@@ -436,7 +454,7 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
             const isTruncated = html.length > 30000;
 
             if (isTruncated) {
-                prompt += `## ВАЖНО: HTML обрезан (${html.length} → 30000 символов), верни только то что видишь.\n\n`;
+                prompt += `## ⚠️ ВАЖНО: HTML обрезан (${html.length} → 30000 символов), верни только то что видишь.\n\n`;
             }
 
             prompt += `## HTML для улучшения:
@@ -444,7 +462,7 @@ if (typeof window.__NINJA_SNATCH__.SmartExtract !== 'undefined') {
 ${truncatedHTML}
 \`\`\`
 
-Верни ТОЛЬКО улучшенный HTML без markdown обёртки:`;
+Верни ТОЛЬКО улучшенный HTML без markdown обёртки. Сохрани все @keyframes и animation свойства!`;
 
             return prompt;
         }
@@ -577,18 +595,31 @@ ${truncatedHTML}
                     const result = SmartStyleInjector.createEnhancedDocument(document.documentElement, title);
                     styledHTML = result.html;
 
+                    // NEW v10.0: Extract real animations via Web Animations API
+                    const realAnimations = SmartStyleInjector.extractRealAnimations
+                        ? SmartStyleInjector.extractRealAnimations(document.documentElement)
+                        : { animations: [], generatedCSS: '', count: 0 };
+
                     extractionContext = {
                         cursors: result.context?.cursors || [],
                         counters: result.context?.counters || [],
-                        animations: SmartStyleInjector.analyzeAnimations(document.documentElement),
-                        marquees: SmartStyleInjector.analyzeMarquees(document.documentElement)
+                        animations: SmartStyleInjector.analyzeAnimations
+                            ? SmartStyleInjector.analyzeAnimations(document.documentElement)
+                            : [],
+                        marquees: SmartStyleInjector.analyzeMarquees
+                            ? SmartStyleInjector.analyzeMarquees(document.documentElement)
+                            : [],
+                        // NEW v10.0: Extracted keyframes data for AI prompt
+                        extractedAnimations: realAnimations
                     };
 
                     metadata.smartAnalysis = {
                         cursorsFound: extractionContext.cursors.length,
                         countersFound: extractionContext.counters.length,
                         animationsFound: extractionContext.animations.length,
-                        marqueesFound: extractionContext.marquees.length
+                        marqueesFound: extractionContext.marquees.length,
+                        // NEW v10.0: Real keyframes extracted via Web Animations API
+                        extractedAnimationsCount: realAnimations.count
                     };
 
                     console.log('[SmartExtract] Smart analysis:', metadata.smartAnalysis);
