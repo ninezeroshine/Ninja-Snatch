@@ -84,13 +84,30 @@ if (typeof window.__NINJA_SNATCH__.SmartStyleInjector !== 'undefined') {
         };
 
         const fixRelativeURL = (url, origin) => {
-            if (!url || url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            if (!url) return url;
+            // Skip already absolute URLs
+            if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+
+            // Handle file:// protocol - these cannot be loaded due to browser security
+            // Return original URL with comment for manual fixing
+            if (origin.startsWith('file://') || url.startsWith('file:')) {
+                _log('warn', `file:// URL detected, browser will block it: ${url}`);
+                // Return the URL as-is; it won't work but at least it's there for reference
+                return url;
+            }
+
             return url.startsWith('/') ? origin + url : origin + '/' + url;
         };
 
         const fixCSSUrls = (cssText, origin) => {
             if (!cssText || !origin) return cssText;
-            return cssText.replace(/url\(['"]?(?!data:|https?:|\/\/|blob:)([^'")]+)['"]?\)/gi,
+
+            // Skip fixing if we're on file:// protocol (won't work anyway)
+            if (origin.startsWith('file://')) {
+                return cssText;
+            }
+
+            return cssText.replace(/url\(['"]?(?!data:|https?:|\/\/|blob:|file:)([^'")\s]+)['"]?\)/gi,
                 (match, url) => `url("${fixRelativeURL(url, origin)}")`);
         };
 
