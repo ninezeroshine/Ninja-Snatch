@@ -477,9 +477,9 @@ ${truncatedHTML}
             if (!apiKey) return { success: false, html, error: 'No API key' };
 
             // Для очень больших файлов пропускаем AI (будет обрезан)
-            if (html.length > 200000) {
+            if (html.length > 600000) {
                 console.log('[SmartExtract] AI skipped - file too large:', html.length);
-                return { success: false, html, error: 'File too large for AI enhancement' };
+                return { success: false, html, error: 'File too large for AI enhancement (>600KB)' };
             }
 
             const prompt = generateAIPrompt(html, context);
