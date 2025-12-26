@@ -1,11 +1,11 @@
 /**
  * Ninja Panel - Content Script UI Component
- * 
+ *
  * The main control panel that appears when Visual Sniper is activated.
  * Features:
  * - Element highlighter (hover to select)
- * - Mode selection indicators
- * - Capture controls
+ * - Mode selection (Copy/Download)
+ * - Asset download with progress
  * - Exit button (ESC key)
  */
 
@@ -13,6 +13,16 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ElementHighlighter, type HighlightedElement } from './ElementHighlighter';
 import { Toast } from './ui/Toast';
+import { DownloadProgress } from './DownloadProgress';
+import { scanDocument } from '@/modules/AssetScanner';
+import { ZipBuilder } from '@/modules/ZipBuilder';
+import { getStyledHtml } from '@/modules/StyleExtractor';
+import { extractStylesheets, buildExtractedCSS } from '@/modules/StylesheetExtractor';
+import type { Asset, FetchAssetResponse } from '@/types/assets';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface NinjaPanelProps {
     onClose: () => void;
@@ -24,23 +34,51 @@ interface ToastState {
     type: 'success' | 'error' | 'info';
 }
 
+interface DownloadState {
+    active: boolean;
+    current: number;
+    total: number;
+    currentAsset: string;
+    cancelled: boolean;
+}
+
+type CaptureMode = 'copy' | 'download';
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps) {
     const [hoveredElement, setHoveredElement] = useState<HighlightedElement | null>(null);
     const [isCapturing, setIsCapturing] = useState(false);
+    const [captureMode, setCaptureMode] = useState<CaptureMode>('copy');
     const [toast, setToast] = useState<ToastState>({ visible: false, message: '', type: 'info' });
+    const [download, setDownload] = useState<DownloadState>({
+        active: false,
+        current: 0,
+        total: 0,
+        currentAsset: '',
+        cancelled: false,
+    });
+
     const panelRef = useRef<HTMLDivElement>(null);
+    const downloadCancelledRef = useRef(false);
 
     // Handle ESC key to close
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                onClose();
+                if (download.active) {
+                    handleCancelDownload();
+                } else {
+                    onClose();
+                }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onClose]);
+    }, [onClose, download.active]);
 
     // Show toast notification
     const showToast = useCallback((message: string, type: ToastState['type'] = 'info') => {
@@ -48,28 +86,179 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
         setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 3000);
     }, []);
 
-    // Handle element selection
-    const handleElementSelect = useCallback(async (element: HTMLElement) => {
-        setIsCapturing(true);
+    // Cancel download
+    const handleCancelDownload = useCallback(() => {
+        downloadCancelledRef.current = true;
+        setDownload((prev) => ({ ...prev, cancelled: true, active: false }));
+        showToast('❌ Загрузка отменена', 'info');
+    }, [showToast]);
 
-        try {
-            // TODO: Implement extraction logic with StyleHydrator
-            const html = element.outerHTML;
+    // Copy HTML to clipboard
+    const handleCopyHtml = useCallback(
+        async (element: HTMLElement) => {
+            try {
+                const html = element.outerHTML;
+                await navigator.clipboard.writeText(html);
+                showToast('✅ HTML скопирован в буфер обмена!', 'success');
+                setTimeout(onClose, 1000);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Не удалось скопировать';
+                showToast(`❌ ${message}`, 'error');
+            }
+        },
+        [onClose, showToast]
+    );
 
-            // Copy to clipboard
-            await navigator.clipboard.writeText(html);
+    // Download as ZIP with assets
+    const handleDownloadZip = useCallback(
+        async (element: HTMLElement) => {
+            downloadCancelledRef.current = false;
 
-            showToast('✅ Элемент скопирован в буфер обмена!', 'success');
+            try {
+                // Step 1: Scan for assets
+                showToast('🔍 Сканирование ассетов...', 'info');
+                const scanResult = scanDocument(element);
+                const assets = scanResult.assets;
 
-            // Close panel after short delay
-            setTimeout(onClose, 1500);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Не удалось захватить элемент';
-            showToast(`❌ ${message}`, 'error');
-        } finally {
-            setIsCapturing(false);
-        }
-    }, [onClose, showToast]);
+                if (assets.length === 0) {
+                    // No assets - just create HTML-only ZIP
+                    const builder = new ZipBuilder();
+                    builder.setHtml(element.outerHTML);
+                    builder.setCss('/* No external styles */');
+
+                    const blob = await builder.generate();
+                    await triggerDownload(blob);
+
+                    showToast('✅ ZIP скачан (без ассетов)', 'success');
+                    setTimeout(onClose, 1500);
+                    return;
+                }
+
+                // Step 2: Start downloading assets
+                setDownload({
+                    active: true,
+                    current: 0,
+                    total: assets.length,
+                    currentAsset: '',
+                    cancelled: false,
+                });
+
+                const builder = new ZipBuilder();
+                let successCount = 0;
+                let failCount = 0;
+
+                for (let i = 0; i < assets.length; i++) {
+                    // Check for cancellation
+                    if (downloadCancelledRef.current) {
+                        return;
+                    }
+
+                    const asset = assets[i];
+
+                    setDownload((prev) => ({
+                        ...prev,
+                        current: i + 1,
+                        currentAsset: getAssetDisplayName(asset),
+                    }));
+
+                    try {
+                        const response = (await browser.runtime.sendMessage({
+                            type: 'FETCH_ASSET',
+                            url: asset.originalUrl,
+                            referer: window.location.origin,
+                        })) as FetchAssetResponse;
+
+                        if (response.success && response.data) {
+                            // Pass Base64 directly - ZipBuilder handles it with {base64: true}
+                            builder.addAsset(asset, response.data);
+                            successCount++;
+                        } else {
+                            console.warn('[NinjaPanel] Failed to fetch:', asset.originalUrl);
+                            failCount++;
+                        }
+                    } catch (error) {
+                        console.error('[NinjaPanel] Asset fetch error:', error);
+                        failCount++;
+                    }
+                }
+
+                // Step 3: Add HTML and generate ZIP
+                if (downloadCancelledRef.current) {
+                    return;
+                }
+
+                setDownload((prev) => ({
+                    ...prev,
+                    currentAsset: 'Извлечение стилей...',
+                }));
+
+                // Extract HTML with injected classes and computed CSS
+                const { html, css: computedCss } = getStyledHtml(element);
+
+                // Extract @media, @keyframes, :hover rules from stylesheets
+                const extracted = extractStylesheets();
+
+                // Get asset map for URL rewriting (font paths, etc.)
+                const assetMap = builder.getAssetMap();
+                const extractedCss = buildExtractedCSS(extracted, assetMap);
+
+                // Combine: extracted rules + computed styles
+                const fullCss = [
+                    extractedCss,
+                    '',
+                    '/* ========== Computed Element Styles ========== */',
+                    computedCss,
+                ].join('\n');
+
+                builder.setHtml(html);
+                builder.setCss(fullCss);
+
+                const blob = await builder.generate();
+
+                // Step 4: Trigger download
+                await triggerDownload(blob);
+
+                setDownload((prev) => ({ ...prev, active: false }));
+
+                // Show result
+                if (failCount > 0) {
+                    showToast(
+                        `✅ ZIP скачан (${successCount} ассетов, ${failCount} пропущено)`,
+                        'success'
+                    );
+                } else {
+                    showToast(`✅ ZIP скачан (${successCount} ассетов)`, 'success');
+                }
+
+                setTimeout(onClose, 1500);
+            } catch (error) {
+                setDownload((prev) => ({ ...prev, active: false }));
+                const message = error instanceof Error ? error.message : 'Не удалось создать ZIP';
+                showToast(`❌ ${message}`, 'error');
+            }
+        },
+        [onClose, showToast]
+    );
+
+    // Handle element selection based on mode
+    const handleElementSelect = useCallback(
+        async (element: HTMLElement) => {
+            if (isCapturing || download.active) return;
+
+            setIsCapturing(true);
+
+            try {
+                if (captureMode === 'copy') {
+                    await handleCopyHtml(element);
+                } else {
+                    await handleDownloadZip(element);
+                }
+            } finally {
+                setIsCapturing(false);
+            }
+        },
+        [isCapturing, download.active, captureMode, handleCopyHtml, handleDownloadZip]
+    );
 
     return (
         <>
@@ -77,7 +266,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
             <ElementHighlighter
                 onHover={setHoveredElement}
                 onSelect={handleElementSelect}
-                isDisabled={isCapturing}
+                isDisabled={isCapturing || download.active}
                 excludeRef={panelRef}
             />
 
@@ -109,6 +298,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                     </div>
                     <button
                         onClick={onClose}
+                        disabled={download.active}
                         style={{
                             width: '28px',
                             height: '28px',
@@ -116,16 +306,19 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                             border: 'none',
                             background: 'rgba(255, 255, 255, 0.1)',
                             color: '#a3a3a3',
-                            cursor: 'pointer',
+                            cursor: download.active ? 'not-allowed' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: '14px',
                             transition: 'all 0.2s',
+                            opacity: download.active ? 0.5 : 1,
                         }}
                         onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                            e.currentTarget.style.color = '#ef4444';
+                            if (!download.active) {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                e.currentTarget.style.color = '#ef4444';
+                            }
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
@@ -134,6 +327,24 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                     >
                         ✕
                     </button>
+                </div>
+
+                {/* Mode Toggle */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <ModeButton
+                        active={captureMode === 'copy'}
+                        onClick={() => setCaptureMode('copy')}
+                        disabled={download.active}
+                    >
+                        📋 Копировать
+                    </ModeButton>
+                    <ModeButton
+                        active={captureMode === 'download'}
+                        onClick={() => setCaptureMode('download')}
+                        disabled={download.active}
+                    >
+                        📦 Скачать ZIP
+                    </ModeButton>
                 </div>
 
                 {/* Instructions */}
@@ -146,9 +357,10 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                     }}
                 >
                     <p style={{ fontSize: '12px', color: '#a3a3a3', margin: 0 }}>
-                        <strong style={{ color: '#6366f1' }}>Наведите</strong> для выделения элементов
+                        <strong style={{ color: '#6366f1' }}>Наведите</strong> для выделения
                         <br />
-                        <strong style={{ color: '#6366f1' }}>Кликните</strong> для захвата
+                        <strong style={{ color: '#6366f1' }}>Кликните</strong> для{' '}
+                        {captureMode === 'copy' ? 'копирования' : 'скачивания'}
                         <br />
                         <strong style={{ color: '#6366f1' }}>ESC</strong> для закрытия
                     </p>
@@ -156,7 +368,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
 
                 {/* Hovered Element Info */}
                 <AnimatePresence mode="wait">
-                    {hoveredElement && (
+                    {hoveredElement && !download.active && (
                         <motion.div
                             key={hoveredElement.tagName}
                             initial={{ opacity: 0, height: 0 }}
@@ -221,7 +433,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                 </AnimatePresence>
 
                 {/* Processing indicator */}
-                {isCapturing && (
+                {isCapturing && !download.active && (
                     <div
                         style={{
                             marginTop: '12px',
@@ -238,8 +450,98 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                 )}
             </motion.div>
 
+            {/* Download Progress */}
+            <AnimatePresence>
+                {download.active && (
+                    <DownloadProgress
+                        current={download.current}
+                        total={download.total}
+                        currentAsset={download.currentAsset}
+                        onCancel={handleCancelDownload}
+                    />
+                )}
+            </AnimatePresence>
+
             {/* Toast Notifications */}
             <Toast visible={toast.visible} message={toast.message} type={toast.type} />
         </>
     );
 });
+
+// ============================================================================
+// Sub-components
+// ============================================================================
+
+interface ModeButtonProps {
+    active: boolean;
+    onClick: () => void;
+    disabled?: boolean;
+    children: React.ReactNode;
+}
+
+function ModeButton({ active, onClick, disabled, children }: ModeButtonProps) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                background: active ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                color: active ? '#6366f1' : '#a3a3a3',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                opacity: disabled ? 0.5 : 1,
+            }}
+        >
+            {children}
+        </button>
+    );
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Trigger file download directly in content script
+ * Using a click on a download link instead of messaging (avoids ArrayBuffer transfer issues)
+ */
+async function triggerDownload(blob: Blob): Promise<void> {
+    const filename = `ninja-export-${Date.now()}.zip`;
+    const url = URL.createObjectURL(blob);
+
+    // Create a temporary download link
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+
+    // Append to document, click, and remove
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Revoke URL after a delay to allow download to start
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    console.log('[NinjaPanel] Download triggered:', filename);
+}
+
+/**
+ * Get short display name for asset
+ */
+function getAssetDisplayName(asset: Asset): string {
+    try {
+        const url = new URL(asset.originalUrl);
+        const filename = url.pathname.split('/').pop() || 'asset';
+        return filename.length > 30 ? filename.slice(0, 27) + '...' : filename;
+    } catch {
+        return asset.localPath;
+    }
+}
+

@@ -44,11 +44,15 @@ export default function App() {
                 throw new Error('Активная вкладка не найдена');
             }
 
-            // Inject content script and activate sniper mode
-            await browser.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content-scripts/content.js'],
+            // Send activation message to content script
+            // Content script is auto-injected by WXT on page load
+            const response = await browser.tabs.sendMessage(tab.id, {
+                type: 'ACTIVATE_SNIPER',
             });
+
+            if (!response?.success) {
+                throw new Error(response?.error ?? 'Не удалось активировать');
+            }
 
             // Close popup after activation
             window.close();
@@ -57,6 +61,7 @@ export default function App() {
             setState((prev) => ({ ...prev, isProcessing: false, status: `Ошибка: ${message}` }));
         }
     }, []);
+
 
     // Handle full page capture
     const handleFullPage = useCallback(async () => {
@@ -69,12 +74,23 @@ export default function App() {
                 throw new Error('Активная вкладка не найдена');
             }
 
-            // TODO: Implement full page capture
-            setState((prev) => ({ ...prev, status: 'Скачивание страницы скоро будет доступно...' }));
+            setState((prev) => ({ ...prev, status: 'Скачивание страницы...' }));
 
+            // Send capture message to content script
+            const response = await browser.tabs.sendMessage(tab.id, {
+                type: 'CAPTURE_FULL_PAGE',
+            });
+
+            if (!response?.success) {
+                throw new Error(response?.error ?? 'Не удалось захватить страницу');
+            }
+
+            setState((prev) => ({ ...prev, status: '✅ Страница скачана!' }));
+
+            // Close popup after short delay
             setTimeout(() => {
-                setState((prev) => ({ ...prev, isProcessing: false, status: null }));
-            }, 2000);
+                window.close();
+            }, 1500);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
             setState((prev) => ({ ...prev, isProcessing: false, status: `Ошибка: ${message}` }));

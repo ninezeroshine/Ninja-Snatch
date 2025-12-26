@@ -32,3 +32,6 @@ coverage/
 
 # Reference files (V1 legacy)
 # reference/
+
+# Sample export folder (testing)
+sample-copy-site/

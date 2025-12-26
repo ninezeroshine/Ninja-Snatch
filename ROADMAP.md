@@ -27,52 +27,67 @@
 
 ---
 
-## Phase 2 🔜 Asset Manager
+## Phase 2 ✅ Asset Manager (Complete)
 
 **Duration:** 1 week  
-**Priority:** P0 (Critical)
+**Status:** Done (26.12.2024)
 
 ### Goal
 
 Download all external assets and bundle them into an offline ZIP archive.
 
-### Tasks
+### Completed Tasks
 
 ```markdown
-- [ ] Implement `AssetScanner` class
-  - [ ] Scan for `<img>`, `<video>`, `<source>` elements
-  - [ ] Extract `url()` from inline styles
-  - [ ] Parse `@font-face` from stylesheets
+- [x] Implement `AssetScanner` class
+  - [x] Scan for `<img>`, `<video>`, `<source>` elements
+  - [x] Extract `url()` from inline styles
+  - [x] Parse `@font-face` from stylesheets (with correct base URL)
   
-- [ ] Implement `AssetFetcher` in background script
-  - [ ] Fetch with custom Referer/Origin headers
-  - [ ] Handle CORS errors gracefully
-  - [ ] Return ArrayBuffer to content script
+- [x] Implement `AssetFetcher` in background script
+  - [x] Fetch with custom Referer/Origin headers
+  - [x] Handle CORS errors gracefully
+  - [x] MIME validation (reject HTML responses)
+  - [x] Asset-type-specific Accept headers
   
-- [ ] Implement `ZipBuilder` with JSZip
-  - [ ] Create folder structure: `/assets/images/`, `/assets/fonts/`
-  - [ ] Rewrite URLs in HTML and CSS
-  - [ ] Generate final `index.html` and `style.css`
+- [x] Implement `ZipBuilder` with JSZip
+  - [x] Create folder structure: `/assets/images/`, `/assets/fonts/`
+  - [x] Rewrite URLs in HTML and CSS
+  - [x] Generate final `index.html` and `style.css`
   
-- [ ] Connect to popup UI
-  - [ ] Add "Download ZIP" action
-  - [ ] Show download progress
+- [x] Implement `StyleExtractor` module
+  - [x] Extract computed styles via getComputedStyle()
+  - [x] Support gradient text (-webkit-background-clip)
+  - [x] Base CSS reset rules
+  
+- [x] Implement `StylesheetExtractor` module
+  - [x] @media rules for responsive layouts
+  - [x] @keyframes for CSS animations
+  - [x] @font-face URL rewriting
+  - [x] :hover/:focus states
+  - [x] CSS variables extraction
+  
+- [x] Connect to UI
+  - [x] "Download ZIP" action
+  - [x] Progress overlay with status
 ```
 
-### Files to Create
+### Created Files
 
 | File | Purpose |
 |------|---------|
 | `modules/AssetScanner.ts` | Find assets in DOM |
-| `modules/AssetFetcher.ts` | Background fetch helper |
 | `modules/ZipBuilder.ts` | JSZip wrapper |
+| `modules/StyleExtractor.ts` | Computed style extraction |
+| `modules/StylesheetExtractor.ts` | CSSOM rule extraction |
 
 ---
 
-## Phase 3 📝 Computed Truth (StyleHydrator)
+## Phase 3 🔜 Computed Truth (StyleHydrator)
 
 **Duration:** 2 weeks  
-**Priority:** P1
+**Priority:** P1  
+**Status:** Next
 
 ### Goal
 
@@ -83,10 +98,9 @@ Extract computed styles and inject `data-truth` attributes for AI-readable outpu
 ```markdown
 - [ ] Implement `StyleHydrator` class
   - [ ] Traverse DOM tree
-  - [ ] Call `getComputedStyle()` on each element
-  - [ ] Filter default browser values
+  - [ ] Generate compact `data-truth` string format
+  - [ ] Filter default browser values (enhancement)
   - [ ] Normalize colors (RGB → Hex)
-  - [ ] Generate compact `data-truth` string
   
 - [ ] Create Tailwind mapping utility
   - [ ] `gap:24px` → `gap-6`
@@ -94,7 +108,7 @@ Extract computed styles and inject `data-truth` attributes for AI-readable outpu
   - [ ] `#0a0a0a` → `bg-[#0a0a0a]`
   
 - [ ] Integrate with extraction flow
-  - [ ] Add "With Truth" mode
+  - [ ] Add "With Truth" mode toggle
   - [ ] Show data-truth preview in panel
 ```
 
@@ -191,13 +205,13 @@ Connect to OpenRouter API for smart HTML cleanup and Tailwind generation.
 
 ## Summary
 
-| Phase | Focus | Priority | Duration |
-|-------|-------|----------|----------|
+| Phase | Focus | Priority | Status |
+|-------|-------|----------|--------|
 | 1 | Foundation | P0 | ✅ Complete |
-| 2 | Asset Manager | P0 | 1 week |
-| 3 | StyleHydrator | P1 | 2 weeks |
-| 4 | MotionSampler | P2 | 2-3 weeks |
-| 5 | AI Integration | P2 | 1 week |
+| 2 | Asset Manager | P0 | ✅ Complete |
+| 3 | StyleHydrator | P1 | 🔜 Next |
+| 4 | MotionSampler | P2 | Planned |
+| 5 | AI Integration | P2 | Planned |
 
 **Total estimated time:** 6-8 weeks
 
@@ -205,6 +219,6 @@ Connect to OpenRouter API for smart HTML cleanup and Tailwind generation.
 
 ## Current Status
 
-📍 **You are here:** Phase 1 complete, ready for Phase 2
+📍 **You are here:** Phase 2 complete, ready for Phase 3
 
-**Next immediate action:** Implement `AssetScanner` class in `modules/AssetScanner.ts`
+**Next immediate action:** Implement `StyleHydrator` class in `modules/StyleHydrator.ts`

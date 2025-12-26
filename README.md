@@ -2,7 +2,7 @@
 
 > **Pixel-Perfect, Offline-First** — Chrome Extension для извлечения HTML/CSS с веб-сайтов
 
-[![Version](https://img.shields.io/badge/version-2.0.0--alpha-blue)](package.json)
+[![Version](https://img.shields.io/badge/version-2.0.0--beta-blue)](package.json)
 [![WXT](https://img.shields.io/badge/WXT-0.20-green)](https://wxt.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19-61dafb)](https://react.dev)
@@ -19,7 +19,7 @@ V2.0 — это полная переработка расширения с но
 | Manifest V3 напрямую | WXT Framework |
 | DOM manipulation | React 19 + Shadow DOM |
 | Нет модулей | ES Modules + NPM |
-| Нет типизации | Строгие интерфейсы |
+| Нет ZIP экспорта | JSZip с полными ассетами |
 
 ### Новая Архитектура
 
@@ -31,7 +31,7 @@ V2.0 — это полная переработка расширения с но
 │  ┌──────────────┐  │  ┌──────────┐  │  ┌─────┐ │
 │  │ Shadow DOM   │  │  │ CORS     │  │  │React│ │
 │  │ NinjaPanel   │  │  │ Bypass   │  │  │ 19  │ │
-│  │ Highlighter  │  │  │ Download │  │  │     │ │
+│  │ StyleExtract │  │  │ Download │  │  │     │ │
 │  └──────────────┘  │  └──────────┘  │  └─────┘ │
 └────────────────────────────────────────────────┘
 ```
@@ -53,19 +53,13 @@ git clone https://github.com/ninezeroshine/Ninja-Snatch.git
 cd Ninja-Snatch
 ```
 
-### Шаг 2: Переключение на ветку v2
-
-```bash
-git checkout feature/v2-wxt-migration
-```
-
-### Шаг 3: Установка зависимостей
+### Шаг 2: Установка зависимостей
 
 ```bash
 npm install
 ```
 
-### Шаг 4: Сборка расширения
+### Шаг 3: Сборка расширения
 
 ```bash
 npm run build
@@ -73,7 +67,7 @@ npm run build
 
 После успешной сборки расширение будет в папке `.output/chrome-mv3/`
 
-### Шаг 5: Загрузка в Chrome
+### Шаг 4: Загрузка в Chrome
 
 1. Откройте `chrome://extensions/` в браузере
 2. Включите **Режим разработчика** (переключатель справа вверху)
@@ -95,7 +89,7 @@ npm run dev
 
 ## 🎯 Features
 
-### Implemented (Phase 1)
+### Phase 1 ✅ Foundation
 
 - [x] **Visual Sniper** — Click to select any element
 - [x] **Element Highlighter** — Real-time hover preview
@@ -104,10 +98,19 @@ npm run dev
 - [x] **Mode Selection** — Clean / Styled / Smart Extract
 - [x] **Copy/Download Toggle** — Choose output action
 
-### Planned (Phase 2+)
+### Phase 2 ✅ Asset Manager
 
-- [ ] **Asset Bundle** — Download images, fonts, CSS as ZIP
-- [ ] **Computed Truth** — `getComputedStyle()` → Tailwind classes
+- [x] **Full Page Capture** — Download entire page as ZIP
+- [x] **Asset Bundling** — Images, fonts, videos in one archive
+- [x] **Font Path Resolution** — Correct @font-face URL handling
+- [x] **Gradient Text Support** — webkit-prefixed CSS properties
+- [x] **Responsive CSS** — @media queries extracted
+- [x] **MIME Validation** — Reject invalid asset responses
+
+### Planned (Phase 3+)
+
+- [ ] **Computed Truth** — `data-truth` attributes for AI
+- [ ] **Tailwind Mapping** — CSS → Tailwind class conversion
 - [ ] **Animation Telemetry** — Record and reproduce animations
 - [ ] **AI Enhancement** — Smart HTML cleanup via OpenRouter
 
@@ -136,11 +139,16 @@ Ninja-Snatch/
 │   │   ├── main.tsx       # Entry point
 │   │   └── index.html     # HTML shell
 │   ├── content.tsx        # Content script (Visual Sniper)
-│   └── background.ts      # Service worker
+│   └── background.ts      # Service worker (CORS bypass)
 ├── components/            # React components
 │   ├── NinjaPanel.tsx     # Control panel
 │   ├── ElementHighlighter.tsx
 │   └── ui/Toast.tsx
+├── modules/               # Core logic
+│   ├── AssetScanner.ts    # Find assets in DOM
+│   ├── ZipBuilder.ts      # ZIP archive builder
+│   ├── StyleExtractor.ts  # Computed styles
+│   └── StylesheetExtractor.ts # CSSOM rules
 ├── types/                 # TypeScript definitions
 │   ├── styles.ts          # ComputedTruth interfaces
 │   ├── animation.ts       # Telemetry types
@@ -164,18 +172,19 @@ Ninja-Snatch/
 - Visual Sniper with element highlighting
 - Popup UI with mode selection
 
-### Phase 2 🔜 Asset Manager
+### Phase 2 ✅ Asset Manager (Complete)
 
-- JSZip integration
-- Background script asset fetching
-- ZIP bundle generation
-- Path rewriting
+- JSZip integration for offline archives
+- Background script asset fetching with CORS bypass
+- ZIP bundle generation with path rewriting
+- StyleExtractor and StylesheetExtractor modules
+- Support for fonts, images, videos, CSS
 
-### Phase 3 📝 Computed Truth
+### Phase 3 🔜 Computed Truth (Next)
 
 - StyleHydrator module
-- `getComputedStyle()` extraction
 - `data-truth` attribute injection
+- Tailwind class mapping
 - AI prompt optimization
 
 ### Phase 4 🎬 Animation Telemetry
@@ -215,4 +224,5 @@ MIT © [NineZeroShine](https://github.com/ninezeroshine)
 ## 🔗 Links
 
 - [V2 Blueprint](./V2_BLUEPRINT.md) — Technical specification
+- [Roadmap](./ROADMAP.md) — Development plan
 - [V1 Technical Report](./reference/v1_technical_report.md) — Legacy analysis

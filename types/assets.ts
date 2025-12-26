@@ -80,10 +80,16 @@ export interface FetchAssetRequest {
 
 /**
  * Background message response
+ * Note: Uses base64 string instead of ArrayBuffer because
+ * Chrome messaging API cannot transfer ArrayBuffer directly
  */
 export interface FetchAssetResponse {
     success: boolean;
-    data?: ArrayBuffer;
+    /** Base64 encoded data (ArrayBuffer can't transfer through messaging) */
+    data?: string;
     error?: string;
     mimeType?: string;
+    /** Size in bytes */
+    size?: number;
 }
+
