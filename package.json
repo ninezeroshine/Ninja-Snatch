@@ -1,30 +1,32 @@
 {
     "name": "ninja-snatch",
-    "version": "1.2.0",
-    "description": "Chrome Extension для копирования HTML блоков с сохранением стилей",
+    "version": "2.0.0",
+    "description": "Chrome Extension для извлечения HTML/CSS с веб-сайтов — Pixel-Perfect, Offline-First",
     "private": true,
+    "type": "module",
     "scripts": {
-        "test": "jest",
-        "test:watch": "jest --watch",
-        "test:coverage": "jest --coverage"
+        "dev": "wxt",
+        "dev:firefox": "wxt -b firefox",
+        "build": "wxt build",
+        "build:firefox": "wxt build -b firefox",
+        "zip": "wxt zip",
+        "zip:firefox": "wxt zip -b firefox",
+        "typecheck": "tsc --noEmit",
+        "postinstall": "wxt prepare"
+    },
+    "dependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "framer-motion": "^11.15.0",
+        "jszip": "^3.10.1"
     },
     "devDependencies": {
-        "jest": "^29.7.0",
-        "jest-environment-jsdom": "^29.7.0"
-    },
-    "jest": {
-        "testEnvironment": "jsdom",
-        "testMatch": [
-            "**/tests/**/*.test.js"
-        ],
-        "moduleFileExtensions": [
-            "js"
-        ],
-        "collectCoverageFrom": [
-            "styleInjector.js",
-            "utils.js"
-        ],
-        "coverageDirectory": "coverage",
-        "verbose": true
+        "@types/react": "^19.0.1",
+        "@types/react-dom": "^19.0.1",
+        "@wxt-dev/module-react": "^1.1.2",
+        "@tailwindcss/vite": "^4.0.0",
+        "tailwindcss": "^4.0.0",
+        "typescript": "^5.7.2",
+        "wxt": "^0.20.13"
     }
 }

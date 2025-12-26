@@ -1,174 +1,199 @@
-# 🥷 Ninja Snatch
+# 🥷 Ninja Snatch v2.0
 
-> **Chrome Extension** для извлечения HTML/CSS с веб-сайтов с сохранением стилей.
+> **Pixel-Perfect, Offline-First** — Chrome Extension для извлечения HTML/CSS с веб-сайтов
 
-![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
-![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)
-![Version](https://img.shields.io/badge/Version-10.0-blue)
-![Vanilla JS](https://img.shields.io/badge/Vanilla-JS-F7DF1E?logo=javascript&logoColor=black)
-
----
-
-## ✨ Возможности
-
-### 🎯 Visual Sniper
-Интерактивный режим выбора — наведите на любой элемент и кликните для копирования.
-
-### 📄 Full Page Capture
-Захват всей страницы со всеми стилями.
-
-### 🎨 Smart Style Extraction
-- **External CSS** — автоматический захват Webflow, Framer, и других CDN-стилей
-- **Google Fonts** — сохранение подключённых шрифтов
-- **CSS Variables** — поддержка переменных из `:root`
-- **@keyframes** — все CSS-анимации сохраняются
-- **Shadow DOM** — рекурсивный обход и сбор стилей
-- **Native Matching** — точный матчинг через `element.matches()`
-
-### 🚀 Animation Fallback
-- CSS reveal-анимации (`snatch-fade-up`, `snatch-marquee`)
-- Motion.dev инъекция для динамических эффектов
-- Детекция и восстановление кастомных курсоров
-
-### ✨ Smart Extract (NEW v10.0)
-- **Автодетекция фреймворка** — React, Vue, Tailwind, Webflow, Framer
-- **Оптимизация стилей** — замена inline-стилей на классы, очистка CSS-module хешей
-- **Форматы вывода** — React + Tailwind, HTML + Tailwind
-- **AI Enhancement** — улучшение кода с помощью LLM (OpenRouter API)
-
-### 📦 Режимы экспорта
-| Режим | Описание |
-|-------|----------|
-| **Чистый HTML** | Сырой HTML без стилей |
-| **Со стилями** | HTML + все CSS в `<style>` блоке |
-| **Compact** | Минифицированный вывод (Tailwind/Webflow) |
-| **Smart Extract** ✨ | Умное извлечение с распознаванием паттернов |
+[![Version](https://img.shields.io/badge/version-2.0.0--alpha-blue)](package.json)
+[![WXT](https://img.shields.io/badge/WXT-0.20-green)](https://wxt.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
+[![React](https://img.shields.io/badge/React-19-61dafb)](https://react.dev)
 
 ---
 
-## 📥 Установка
+## 🚀 What's New in V2.0
 
-```bash
-git clone https://github.com/youruser/ninja-snatch.git
+V2.0 — это полная переработка расширения с новым технологическим стеком:
+
+| Было (v10.0) | Стало (v2.0) |
+|--------------|--------------|
+| Vanilla JavaScript | TypeScript 5.7 (strict) |
+| Manifest V3 напрямую | WXT Framework |
+| DOM manipulation | React 19 + Shadow DOM |
+| Нет модулей | ES Modules + NPM |
+| Нет типизации | Строгие интерфейсы |
+
+### Новая Архитектура
+
+```
+┌────────────────────────────────────────────────┐
+│              WXT (Build System)                 │
+├────────────────────────────────────────────────┤
+│  Content Script    │  Background    │  Popup   │
+│  ┌──────────────┐  │  ┌──────────┐  │  ┌─────┐ │
+│  │ Shadow DOM   │  │  │ CORS     │  │  │React│ │
+│  │ NinjaPanel   │  │  │ Bypass   │  │  │ 19  │ │
+│  │ Highlighter  │  │  │ Download │  │  │     │ │
+│  └──────────────┘  │  └──────────┘  │  └─────┘ │
+└────────────────────────────────────────────────┘
 ```
 
-1. Откройте `chrome://extensions/`
-2. Включите **"Режим разработчика"**
-3. Нажмите **"Загрузить распакованное расширение"**
-4. Выберите папку `Ninja-Snatch`
+---
+
+## 📦 Installation (Development)
+
+### Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/ninezeroshine/Ninja-Snatch.git
+cd Ninja-Snatch
+
+# Switch to v2 branch
+git checkout feature/v2-wxt-migration
+
+# Install dependencies
+npm install
+
+# Development mode (with HMR)
+npm run dev
+
+# Production build
+npm run build
+```
+
+### Load in Chrome
+
+1. Navigate to `chrome://extensions/`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked**
+4. Select `.output/chrome-mv3` folder
 
 ---
 
-## 🏗️ Архитектура
+## 🎯 Features
+
+### Implemented (Phase 1)
+
+- [x] **Visual Sniper** — Click to select any element
+- [x] **Element Highlighter** — Real-time hover preview
+- [x] **Shadow DOM Isolation** — UI protected from host page styles
+- [x] **Premium UI** — Framer Motion animations, gradient buttons
+- [x] **Mode Selection** — Clean / Styled / Smart Extract
+- [x] **Copy/Download Toggle** — Choose output action
+
+### Planned (Phase 2+)
+
+- [ ] **Asset Bundle** — Download images, fonts, CSS as ZIP
+- [ ] **Computed Truth** — `getComputedStyle()` → Tailwind classes
+- [ ] **Animation Telemetry** — Record and reproduce animations
+- [ ] **AI Enhancement** — Smart HTML cleanup via OpenRouter
+
+---
+
+## 🛠 Tech Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| [WXT](https://wxt.dev) | 0.20 | Extension framework |
+| [TypeScript](https://typescriptlang.org) | 5.7 | Type safety |
+| [React](https://react.dev) | 19 | UI components |
+| [Tailwind CSS](https://tailwindcss.com) | 4.0 | Styling |
+| [Framer Motion](https://motion.dev) | 11 | Animations |
+| [JSZip](https://stuk.github.io/jszip/) | 3.10 | Asset bundling |
+
+---
+
+## 📁 Project Structure
 
 ```
 Ninja-Snatch/
-├── manifest.json          # Manifest V3 конфигурация
-├── popup.html/js/css      # UI расширения
-├── styleInjector.js       # Ядро — сбор CSS, обработка HTML
-├── smartStyleInjector.js  # Smart Extract CSS модуль
-├── smartExtract.js        # Smart Extract v2 — AI pipeline
-├── selector.js            # Visual Sniper
-├── config.js              # Централизованные паттерны
-├── background.js          # Service worker для downloads
-├── utils.js               # Вспомогательные функции
-└── tests/                 # Jest тесты
+├── entrypoints/           # WXT entry points
+│   ├── popup/             # Extension popup
+│   │   ├── App.tsx        # Main React component
+│   │   ├── main.tsx       # Entry point
+│   │   └── index.html     # HTML shell
+│   ├── content.tsx        # Content script (Visual Sniper)
+│   └── background.ts      # Service worker
+├── components/            # React components
+│   ├── NinjaPanel.tsx     # Control panel
+│   ├── ElementHighlighter.tsx
+│   └── ui/Toast.tsx
+├── types/                 # TypeScript definitions
+│   ├── styles.ts          # ComputedTruth interfaces
+│   ├── animation.ts       # Telemetry types
+│   └── assets.ts          # Asset management
+├── constants/             # Configuration
+│   ├── cssProperties.ts   # Style → Tailwind mapping
+│   └── cleanup.ts         # Extension selectors
+├── public/                # Static assets (icons)
+├── reference/             # V1 code for reference
+└── wxt.config.ts          # WXT configuration
 ```
 
-### Ключевые методы (`styleInjector.js`)
+---
 
-| Метод | Назначение |
-|-------|-----------|
-| `collectAllCSS()` | Сбор всех CSS правил со страницы |
-| `collectShadowCSS()` | Рекурсивный обход Shadow DOM |
-| `getMatchedCSSRules()` | Native matching через `element.matches()` |
-| `cleanHTML()` | Удаление трекеров и browser extensions |
-| `fixHTMLUrls()` | Конвертация относительных URL |
-| `generateRevealAnimationsCSS()` | CSS fallback анимации |
+## 🗺 Roadmap
+
+### Phase 1 ✅ Foundation (Complete)
+
+- WXT + React + TypeScript setup
+- Shadow DOM content script
+- Visual Sniper with element highlighting
+- Popup UI with mode selection
+
+### Phase 2 🔜 Asset Manager
+
+- JSZip integration
+- Background script asset fetching
+- ZIP bundle generation
+- Path rewriting
+
+### Phase 3 📝 Computed Truth
+
+- StyleHydrator module
+- `getComputedStyle()` extraction
+- `data-truth` attribute injection
+- AI prompt optimization
+
+### Phase 4 🎬 Animation Telemetry
+
+- MotionSampler module
+- `requestAnimationFrame` recording
+- Easing detection
+- Framer Motion code generation
+
+### Phase 5 🤖 AI Integration
+
+- OpenRouter API connection
+- Multi-model support (GPT-4o, Claude, Gemini)
+- Smart HTML cleanup
+- Tailwind class generation
 
 ---
 
-## ⚙️ Конфигурация (`config.js`)
-
-Расширение автоматически:
-- Сохраняет настройки между сессиями (`chrome.storage.local`)
-- Определяет Tailwind и подключает CDN
-- Конвертирует относительные URL в абсолютные
-- Удаляет трекеры (analytics, GTM, Facebook pixel)
-- Удаляет browser extensions (Grammarly, LastPass)
-- Сохраняет animation libraries (GSAP, Webflow.js, jQuery)
-
----
-
-## 🔧 Разработка
+## 📜 Scripts
 
 ```bash
-# Установка зависимостей (для тестов)
-npm install
-
-# Запуск тестов
-npm test
-
-# После изменений — перезагрузите расширение
-# chrome://extensions/ → 🔄 Update
+npm run dev          # Start dev server with HMR
+npm run build        # Production build for Chrome
+npm run build:firefox # Production build for Firefox
+npm run zip          # Create extension package
+npm run typecheck    # TypeScript validation
 ```
 
-### Тестирование
+---
 
-| Файл | Покрытие |
-|------|----------|
-| `styleInjector.js` | ✅ Основные методы |
-| `popup.js` | ❌ Не покрыт |
-| `selector.js` | ❌ Не покрыт |
+## 📄 License
+
+MIT © [NineZeroShine](https://github.com/ninezeroshine)
 
 ---
 
-## 🚧 Известные ограничения
+## 🔗 Links
 
-| Ограничение | Описание |
-|-------------|----------|
-| **React Hydration** | Не восстанавливается в статическом HTML |
-| **GSAP/Framer Motion** | Требуют оригинальный runtime |
-| **Cross-origin CSS** | Сохраняется только ссылка при ошибке доступа |
-| **Closed Shadow DOM** | Недоступен по дизайну браузера |
-| **Compact Export** | Работает только для Tailwind/Webflow |
-
----
-
-## 📝 Changelog
-
-### v10.0 (2025-12-24)
-- ✨ **Smart Extract** — новый режим извлечения с AI-улучшением
-- 🧠 Автодетекция фреймворка (React, Vue, Tailwind, Webflow, Framer)
-- 🔄 Замена inline-стилей на классы
-- 🧹 Очистка CSS-module хешей
-- 🤖 Опциональное AI Enhancement через OpenRouter API
-- 📦 Новые форматы: React + Tailwind, HTML + Tailwind
-
-### v9.0 (2025-12-23)
-- 🆕 Scroll-trigger детекция (AOS, Locomotive, Webflow)
-- 🆕 Counter animations
-- 🆕 Custom cursor support
-- 🆕 Shadow DOM collection
-- 🆕 Native `element.matches()` для CSS matching
-- 📝 Обновлена документация и системный промпт
-
-### v7.6
-- External CSS capture (Webflow CDN, Framer)
-- Improved CSS matching (tags, IDs, data-*)
-
-### v7.5
-- Universal reveal animations
-- Script preservation for animation libraries
-
----
-
-## 📄 Лицензия
-
-MIT © 2024
-
----
-
-<div align="center">
-  <strong>🥷 Ninja Snatch — Copy Anything, Style Everything</strong>
-</div>
+- [V2 Blueprint](./V2_BLUEPRINT.md) — Technical specification
+- [V1 Technical Report](./reference/v1_technical_report.md) — Legacy analysis

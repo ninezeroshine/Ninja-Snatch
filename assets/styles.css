@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* 
+ * Ninja Snatch Global Styles
+ * 
+ * These styles are injected into Shadow DOM for content script UI
+ * and used in popup/options pages.
+ */
+
+/* Custom CSS Variables for theming */
+:root {
+  --ninja-primary: #6366f1;
+  --ninja-primary-hover: #4f46e5;
+  --ninja-accent: #22d3ee;
+  --ninja-success: #10b981;
+  --ninja-warning: #f59e0b;
+  --ninja-error: #ef4444;
+  --ninja-bg-dark: #0f0f0f;
+  --ninja-bg-card: #1a1a1a;
+  --ninja-bg-elevated: #252525;
+  --ninja-text-primary: #ffffff;
+  --ninja-text-secondary: #a3a3a3;
+  --ninja-border: #333333;
+}
+
+/* Shadow DOM container reset */
+.ninja-container {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ninja-text-primary);
+}

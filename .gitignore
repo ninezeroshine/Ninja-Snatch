@@ -1,6 +1,34 @@
+# Dependencies
 node_modules/
+
+# WXT build outputs
+.output/
+.wxt/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
 *.log
-dist/
-build/
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
 .env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+
+# Reference files (V1 legacy)
+# reference/
