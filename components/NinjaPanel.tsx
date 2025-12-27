@@ -18,6 +18,7 @@ import { scanDocument } from '@/modules/AssetScanner';
 import { ZipBuilder } from '@/modules/ZipBuilder';
 import { getStyledHtml } from '@/modules/StyleExtractor';
 import { extractStylesheets, buildExtractedCSS } from '@/modules/StylesheetExtractor';
+import { hydrateTree } from '@/modules/StyleHydrator';
 import type { Asset, FetchAssetResponse } from '@/types/assets';
 
 // ============================================================================
@@ -52,6 +53,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
     const [hoveredElement, setHoveredElement] = useState<HighlightedElement | null>(null);
     const [isCapturing, setIsCapturing] = useState(false);
     const [captureMode, setCaptureMode] = useState<CaptureMode>('copy');
+    const [includeTruth, setIncludeTruth] = useState(false);
     const [toast, setToast] = useState<ToastState>({ visible: false, message: '', type: 'info' });
     const [download, setDownload] = useState<DownloadState>({
         active: false,
@@ -93,20 +95,40 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
         showToast('❌ Загрузка отменена', 'info');
     }, [showToast]);
 
-    // Copy HTML to clipboard
+    // Copy HTML to clipboard (with optional data-truth)
     const handleCopyHtml = useCallback(
         async (element: HTMLElement) => {
             try {
-                const html = element.outerHTML;
+                let html: string;
+
+                if (includeTruth) {
+                    // Clone and hydrate for data-truth
+                    const clone = element.cloneNode(true) as HTMLElement;
+                    const container = document.createElement('div');
+                    container.style.cssText = 'position:absolute;left:-9999px;visibility:hidden;';
+                    container.appendChild(clone);
+                    document.body.appendChild(container);
+
+                    try {
+                        const result = hydrateTree(clone, { skipDefaults: true });
+                        html = clone.outerHTML;
+                        showToast(`✅ HTML с data-truth скопирован! (${result.hydratedCount} элементов)`, 'success');
+                    } finally {
+                        document.body.removeChild(container);
+                    }
+                } else {
+                    html = element.outerHTML;
+                    showToast('✅ HTML скопирован в буфер обмена!', 'success');
+                }
+
                 await navigator.clipboard.writeText(html);
-                showToast('✅ HTML скопирован в буфер обмена!', 'success');
                 setTimeout(onClose, 1000);
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Не удалось скопировать';
                 showToast(`❌ ${message}`, 'error');
             }
         },
-        [onClose, showToast]
+        [onClose, showToast, includeTruth]
     );
 
     // Download as ZIP with assets
@@ -195,6 +217,19 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                 // Extract HTML with injected classes and computed CSS
                 const { html, css: computedCss } = getStyledHtml(element);
 
+                // Optionally hydrate with data-truth attributes
+                let finalHtml = html;
+                if (includeTruth) {
+                    // Parse HTML, hydrate, and serialize
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+                    const rootElement = tempDiv.firstElementChild as HTMLElement;
+                    if (rootElement) {
+                        hydrateTree(rootElement, { skipDefaults: true });
+                        finalHtml = tempDiv.innerHTML;
+                    }
+                }
+
                 // Extract @media, @keyframes, :hover rules from stylesheets
                 const extracted = extractStylesheets();
 
@@ -210,7 +245,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                     computedCss,
                 ].join('\n');
 
-                builder.setHtml(html);
+                builder.setHtml(finalHtml);
                 builder.setCss(fullCss);
 
                 const blob = await builder.generate();
@@ -347,6 +382,53 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                     </ModeButton>
                 </div>
 
+                {/* Include Truth Toggle */}
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        background: includeTruth ? 'rgba(34, 211, 238, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                        marginBottom: '12px',
+                        cursor: download.active ? 'not-allowed' : 'pointer',
+                        opacity: download.active ? 0.5 : 1,
+                        transition: 'all 0.2s',
+                    }}
+                    onClick={() => !download.active && setIncludeTruth(!includeTruth)}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '14px' }}>🧬</span>
+                        <span style={{ fontSize: '12px', color: includeTruth ? '#22d3ee' : '#a3a3a3' }}>
+                            Include Truth
+                        </span>
+                    </div>
+                    <div
+                        style={{
+                            width: '36px',
+                            height: '20px',
+                            borderRadius: '10px',
+                            background: includeTruth ? '#22d3ee' : '#404040',
+                            position: 'relative',
+                            transition: 'background 0.2s',
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                background: '#fff',
+                                position: 'absolute',
+                                top: '2px',
+                                left: includeTruth ? '18px' : '2px',
+                                transition: 'left 0.2s',
+                            }}
+                        />
+                    </div>
+                </div>
+
                 {/* Instructions */}
                 <div
                     style={{
@@ -361,6 +443,7 @@ export const NinjaPanel = memo(function NinjaPanel({ onClose }: NinjaPanelProps)
                         <br />
                         <strong style={{ color: '#6366f1' }}>Кликните</strong> для{' '}
                         {captureMode === 'copy' ? 'копирования' : 'скачивания'}
+                        {includeTruth && <span style={{ color: '#22d3ee' }}> + data-truth</span>}
                         <br />
                         <strong style={{ color: '#6366f1' }}>ESC</strong> для закрытия
                     </p>

@@ -15,12 +15,19 @@ import { scanDocument } from '@/modules/AssetScanner';
 import { ZipBuilder } from '@/modules/ZipBuilder';
 import { getStyledHtml } from '@/modules/StyleExtractor';
 import { extractStylesheets, buildExtractedCSS } from '@/modules/StylesheetExtractor';
+import { hydrateTree } from '@/modules/StyleHydrator';
+import { recordAnimation } from '@/modules/MotionSampler';
+import { findAnimatedElements } from '@/utils/triggerDetector';
+import { generateMotionJson, telemetryToDataMotion } from '@/utils/framerMotionGenerator';
+import type { AnimationTelemetry } from '@/types/animation';
 import type { Asset, FetchAssetResponse } from '@/types/assets';
 import '@/assets/styles.css';
 
 // Message types for content script communication
 interface ContentMessage {
   type: 'ACTIVATE_SNIPER' | 'DEACTIVATE_SNIPER' | 'CAPTURE_FULL_PAGE' | 'PING';
+  includeTruth?: boolean;
+  includeMotion?: boolean;
 }
 
 // Progress update callback type
@@ -103,9 +110,11 @@ export default defineContentScript({
      * Capture the full page as a ZIP bundle
      */
     async function captureFullPage(
-      _sendProgress?: ProgressCallback
+      _sendProgress?: ProgressCallback,
+      includeTruth: boolean = false,
+      includeMotion: boolean = false
     ): Promise<{ success: boolean; error?: string }> {
-      console.log('[Ninja Snatch] Starting full page capture');
+      console.log('[Ninja Snatch] Starting full page capture', { includeTruth, includeMotion });
 
       // Show progress overlay
       const overlay = showProgressOverlay();
@@ -162,10 +171,72 @@ export default defineContentScript({
 
         console.log('[Ninja Snatch] Extracting styles...');
 
+        // Optionally hydrate with data-truth attributes BEFORE cloning
+        // This must happen on live DOM for getComputedStyle to work
+        let hydratedCount = 0;
+        if (includeTruth) {
+          const result = hydrateTree(targetElement, { skipDefaults: true });
+          hydratedCount = result.hydratedCount;
+          console.log(`[Ninja Snatch] Hydrated ${hydratedCount} elements with data-truth`);
+        }
+
+        // Step 3.5: Record animations BEFORE cloning HTML (so data-motion is captured)
+        let motionTelemetry: Map<string, AnimationTelemetry> = new Map();
+        let elementsToCleanup: Element[] = [];
+        if (includeMotion) {
+          updateProgressOverlay(overlay, 'Записываем анимации...', 75);
+          const animatedElements = findAnimatedElements(targetElement);
+          console.log(`[Ninja Snatch] Found ${animatedElements.length} animated elements`);
+
+          // Record animations for first 10 elements (avoid performance issues)
+          const elementsToRecord = animatedElements.slice(0, 10);
+          for (const element of elementsToRecord) {
+            try {
+              const telemetry = await recordAnimation(element, 'load', 1500);
+              if (telemetry.frames.length > 2) {
+                motionTelemetry.set(telemetry.elementSelector, telemetry);
+                // Add data-motion attribute to live DOM (will be captured in clone)
+                if (element instanceof HTMLElement) {
+                  element.setAttribute('data-motion', telemetryToDataMotion(telemetry));
+                  elementsToCleanup.push(element);
+                }
+              }
+            } catch (err) {
+              console.warn('[Ninja Snatch] Failed to record animation:', err);
+            }
+          }
+          console.log(`[Ninja Snatch] Recorded ${motionTelemetry.size} animations`);
+        }
+
         // Clone the target element to avoid including extension UI
+        // This will now include data-truth AND data-motion attributes
+        updateProgressOverlay(overlay, 'Клонируем HTML...', 80);
         const { html, css: computedCss } = getStyledHtml(targetElement, {
           excludeSelector: '[id^="ninja-"], [class*="ninja-snatch"]',
         });
+
+        // Cleanup: remove data-truth and data-motion from live DOM to avoid pollution
+        if (includeTruth) {
+          const cleanupWalker = document.createTreeWalker(
+            targetElement,
+            NodeFilter.SHOW_ELEMENT
+          );
+          let node: Node | null = cleanupWalker.currentNode;
+          while (node) {
+            if (node instanceof HTMLElement && node.hasAttribute('data-truth')) {
+              node.removeAttribute('data-truth');
+            }
+            node = cleanupWalker.nextNode();
+          }
+          console.log('[Ninja Snatch] Cleaned up data-truth from live DOM');
+        }
+
+        // Cleanup data-motion from live DOM
+        for (const element of elementsToCleanup) {
+          if (element instanceof HTMLElement && element.hasAttribute('data-motion')) {
+            element.removeAttribute('data-motion');
+          }
+        }
 
         // Extract @media, @keyframes, :hover rules from stylesheets
         const extracted = extractStylesheets();
@@ -184,6 +255,13 @@ export default defineContentScript({
 
         builder.setHtml(html);
         builder.setCss(fullCss);
+
+        // Add motion.json to ZIP if we have animations
+        if (motionTelemetry.size > 0) {
+          const motionJson = generateMotionJson(motionTelemetry);
+          builder.addFile('motion.json', motionJson);
+          console.log(`[Ninja Snatch] Added ${motionTelemetry.size} animations to motion.json`);
+        }
 
         // Step 4: Generate and trigger download
         // Re-show overlay for final phase
@@ -232,7 +310,7 @@ export default defineContentScript({
         }
 
         if (message.type === 'CAPTURE_FULL_PAGE') {
-          captureFullPage()
+          captureFullPage(undefined, message.includeTruth ?? false, message.includeMotion ?? false)
             .then((result) => sendResponse(result))
             .catch((error) =>
               sendResponse({

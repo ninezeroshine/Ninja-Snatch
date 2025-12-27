@@ -16,4 +16,23 @@ export {
     type ExtractedStylesheet,
 } from './StylesheetExtractor';
 
+export {
+    hydrateElement,
+    hydrateTree,
+    dehydrateTree,
+    getTruthString,
+    getHydratedHtml,
+    isDefaultValue,
+    type HydrationOptions,
+    type HydrationResult,
+} from './StyleHydrator';
 
+export {
+    MotionSampler,
+    createSampler,
+    recordAnimation,
+    recordMultiple,
+    snapshotState,
+    type RecordingOptions,
+    type RecordingState,
+} from './MotionSampler';

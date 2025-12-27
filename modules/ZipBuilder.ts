@@ -118,6 +118,15 @@ export class ZipBuilder {
     }
 
     /**
+     * Add a raw file to the ZIP (for JSON, txt, etc.)
+     * @param path - Path inside the ZIP
+     * @param content - File content as string
+     */
+    addFile(path: string, content: string): void {
+        this.zip.file(path, content);
+    }
+
+    /**
      * Generate the final ZIP blob
      */
     async generate(): Promise<Blob> {

@@ -75,3 +75,61 @@ export interface CSSPropertyValue {
     isDefault: boolean;
     shorthand: string;
 }
+
+/**
+ * data-truth attribute structure
+ * Compact representation of computed styles
+ */
+export interface TruthData {
+    display?: string;
+    flexDir?: string;
+    justify?: string;
+    align?: string;
+    gap?: string;
+    pos?: string;
+    w?: string;
+    h?: string;
+    minW?: string;
+    maxW?: string;
+    minH?: string;
+    maxH?: string;
+    pad?: string;
+    pt?: string;
+    pr?: string;
+    pb?: string;
+    pl?: string;
+    margin?: string;
+    mt?: string;
+    mr?: string;
+    mb?: string;
+    ml?: string;
+    bg?: string;
+    bgColor?: string;
+    bgImg?: string;
+    radius?: string;
+    shadow?: string;
+    opacity?: string;
+    font?: string;
+    size?: string;
+    weight?: string;
+    lh?: string;
+    tracking?: string;
+    textAlign?: string;
+    color?: string;
+    border?: string;
+    overflow?: string;
+    z?: string;
+    tf?: string;
+    transition?: string;
+    cursor?: string;
+}
+
+/**
+ * Tailwind mapping result
+ */
+export interface TailwindMapping {
+    property: string;
+    cssValue: string;
+    tailwindClass: string;
+    isArbitrary: boolean;
+}

@@ -21,6 +21,8 @@ type OutputAction = 'copy' | 'download';
 interface AppState {
     mode: ExtractionMode;
     action: OutputAction;
+    includeTruth: boolean;
+    includeMotion: boolean;
     isProcessing: boolean;
     status: string | null;
 }
@@ -29,6 +31,8 @@ export default function App() {
     const [state, setState] = useState<AppState>({
         mode: 'styled',
         action: 'copy',
+        includeTruth: false,
+        includeMotion: false,
         isProcessing: false,
         status: null,
     });
@@ -48,6 +52,8 @@ export default function App() {
             // Content script is auto-injected by WXT on page load
             const response = await browser.tabs.sendMessage(tab.id, {
                 type: 'ACTIVATE_SNIPER',
+                includeTruth: state.includeTruth,
+                includeMotion: state.includeMotion,
             });
 
             if (!response?.success) {
@@ -79,6 +85,8 @@ export default function App() {
             // Send capture message to content script
             const response = await browser.tabs.sendMessage(tab.id, {
                 type: 'CAPTURE_FULL_PAGE',
+                includeTruth: state.includeTruth,
+                includeMotion: state.includeMotion,
             });
 
             if (!response?.success) {
@@ -95,7 +103,7 @@ export default function App() {
             const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
             setState((prev) => ({ ...prev, isProcessing: false, status: `Ошибка: ${message}` }));
         }
-    }, []);
+    }, [state.includeTruth]);
 
     return (
         <div className="ninja-container w-[320px] min-h-[400px] bg-[var(--ninja-bg-dark)] p-4">
@@ -147,14 +155,88 @@ export default function App() {
                     <ModeOption
                         mode="smart"
                         label="Умное извлечение"
-                        description="Оптимизированный Tailwind код"
-                        badge="✨"
+                        description="Скоро: AI-оптимизация"
+                        badge="🔜"
                         selected={state.mode === 'smart'}
-                        onClick={() => setState((prev) => ({ ...prev, mode: 'smart' }))}
+                        onClick={() => { }}
+                        disabled={true}
                     />
                 </div>
             </section>
 
+            {/* Include Truth Toggle */}
+            <div
+                className={`
+                    flex items-center justify-between p-3 rounded-xl mb-6 cursor-pointer transition-all
+                    ${state.includeTruth
+                        ? 'bg-[#22d3ee]/10 border border-[#22d3ee]/30'
+                        : 'bg-[var(--ninja-bg-card)] border border-transparent hover:border-[var(--ninja-border)]'
+                    }
+                `}
+                onClick={() => setState((prev) => ({ ...prev, includeTruth: !prev.includeTruth }))}
+            >
+                <div className="flex items-center gap-2">
+                    <span className="text-lg">🧬</span>
+                    <div>
+                        <span className={`text-sm font-medium ${state.includeTruth ? 'text-[#22d3ee]' : 'text-white'}`}>
+                            Include Truth
+                        </span>
+                        <p className="text-xs text-[var(--ninja-text-secondary)]">
+                            Добавить data-truth атрибуты
+                        </p>
+                    </div>
+                </div>
+                <div
+                    className={`
+                        w-10 h-6 rounded-full relative transition-colors
+                        ${state.includeTruth ? 'bg-[#22d3ee]' : 'bg-[#404040]'}
+                    `}
+                >
+                    <div
+                        className={`
+                            w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all
+                            ${state.includeTruth ? 'left-[18px]' : 'left-0.5'}
+                        `}
+                    />
+                </div>
+            </div>
+
+            {/* Include Motion Toggle */}
+            <div
+                className={`
+                    flex items-center justify-between p-3 rounded-xl mb-6 cursor-pointer transition-all
+                    ${state.includeMotion
+                        ? 'bg-[#f97316]/10 border border-[#f97316]/30'
+                        : 'bg-[var(--ninja-bg-card)] border border-transparent hover:border-[var(--ninja-border)]'
+                    }
+                `}
+                onClick={() => setState((prev) => ({ ...prev, includeMotion: !prev.includeMotion }))}
+            >
+                <div className="flex items-center gap-2">
+                    <span className="text-lg">🎬</span>
+                    <div>
+                        <span className={`text-sm font-medium ${state.includeMotion ? 'text-[#f97316]' : 'text-white'}`}>
+                            Include Motion
+                        </span>
+                        <p className="text-xs text-[var(--ninja-text-secondary)]">
+                            Записать анимации элементов
+                        </p>
+                    </div>
+                </div>
+                <div
+                    className={`
+                        w-10 h-6 rounded-full relative transition-colors
+                        ${state.includeMotion ? 'bg-[#f97316]' : 'bg-[#404040]'}
+                    `}
+                >
+                    <div
+                        className={`
+                            w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all
+                            ${state.includeMotion ? 'left-[18px]' : 'left-0.5'}
+                        `}
+                    />
+                </div>
+            </div>
             {/* Action Buttons */}
             <div className="space-y-3">
                 <PrimaryButton
@@ -222,17 +304,21 @@ interface ModeOptionProps {
     badge?: string;
     selected: boolean;
     onClick: () => void;
+    disabled?: boolean;
 }
 
-function ModeOption({ label, description, badge, selected, onClick }: ModeOptionProps) {
+function ModeOption({ label, description, badge, selected, onClick, disabled }: ModeOptionProps) {
     return (
         <button
             onClick={onClick}
+            disabled={disabled}
             className={`
         w-full p-3 rounded-xl text-left transition-all duration-200
-        ${selected
-                    ? 'bg-[var(--ninja-primary)]/10 border-2 border-[var(--ninja-primary)] shadow-lg shadow-[var(--ninja-primary)]/10'
-                    : 'bg-[var(--ninja-bg-card)] border-2 border-transparent hover:border-[var(--ninja-border)]'
+        ${disabled
+                    ? 'bg-[var(--ninja-bg-card)] border-2 border-transparent opacity-50 cursor-not-allowed'
+                    : selected
+                        ? 'bg-[var(--ninja-primary)]/10 border-2 border-[var(--ninja-primary)] shadow-lg shadow-[var(--ninja-primary)]/10'
+                        : 'bg-[var(--ninja-bg-card)] border-2 border-transparent hover:border-[var(--ninja-border)]'
                 }
       `}
         >

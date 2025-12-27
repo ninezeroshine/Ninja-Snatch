@@ -4,10 +4,10 @@
 
 ---
 
-## Phase 1 ✅ Foundation (Complete)
+## Phase 1 ✅ Foundation (Stable)
 
 **Duration:** 1 session  
-**Status:** Done
+**Status:** ✅ Complete — Production Ready
 
 ### Deliverables
 
@@ -27,10 +27,10 @@
 
 ---
 
-## Phase 2 ✅ Asset Manager (Complete)
+## Phase 2 ✅ Asset Manager (Beta)
 
 **Duration:** 1 week  
-**Status:** Done (26.12.2024)
+**Status:** ✅ Complete — Beta Testing (26.12.2024)
 
 ### Goal
 
@@ -81,94 +81,156 @@ Download all external assets and bundle them into an offline ZIP archive.
 | `modules/StyleExtractor.ts` | Computed style extraction |
 | `modules/StylesheetExtractor.ts` | CSSOM rule extraction |
 
+### Known Issues (Beta)
+
+- Large CSS files (100K+ lines) from complex sites — optimization planned for Phase 5
+- Some CSS variables may not resolve correctly
+
 ---
 
-## Phase 3 🔜 Computed Truth (StyleHydrator)
+## Phase 3 ✅ Computed Truth / StyleHydrator (Beta)
 
 **Duration:** 2 weeks  
 **Priority:** P1  
-**Status:** Next
+**Status:** ✅ Complete — Beta Testing (27.12.2024)
 
 ### Goal
 
 Extract computed styles and inject `data-truth` attributes for AI-readable output.
 
-### Tasks
+### Completed Tasks
 
 ```markdown
-- [ ] Implement `StyleHydrator` class
-  - [ ] Traverse DOM tree
-  - [ ] Generate compact `data-truth` string format
-  - [ ] Filter default browser values (enhancement)
-  - [ ] Normalize colors (RGB → Hex)
+- [x] Implement `StyleHydrator` class
+  - [x] Traverse DOM tree (TreeWalker)
+  - [x] Generate compact `data-truth` string format
+  - [x] Filter default browser values (enhancement)
+  - [x] Normalize colors (RGB → Hex)
   
-- [ ] Create Tailwind mapping utility
-  - [ ] `gap:24px` → `gap-6`
-  - [ ] `padding:20px 40px` → `py-5 px-10`
-  - [ ] `#0a0a0a` → `bg-[#0a0a0a]`
+- [x] Create Tailwind mapping utility
+  - [x] `gap:24px` → `gap-6`
+  - [x] `padding:20px 40px` → `py-5 px-10`
+  - [x] `#0a0a0a` → `bg-[#0a0a0a]`
   
-- [ ] Integrate with extraction flow
-  - [ ] Add "With Truth" mode toggle
-  - [ ] Show data-truth preview in panel
+- [x] Integrate with extraction flow
+  - [x] Add "Include Truth" mode toggle (🧬)
+  - [x] Updated Copy HTML and Download ZIP actions
 ```
 
-### Files to Create
+### Created Files
 
 | File | Purpose |
 |------|---------|
-| `modules/StyleHydrator.ts` | Computed style extraction |
+| `modules/StyleHydrator.ts` | Computed style extraction & data-truth injection |
 | `utils/tailwindMapper.ts` | CSS → Tailwind mapping |
-| `utils/colorNormalizer.ts` | RGB → Hex conversion |
+| `utils/colorNormalizer.ts` | RGB/RGBA/HSL → Hex conversion |
+
+### Output Example
+
+```html
+<div data-truth="display:flex; gap:24px; w:1280px; bg:#0a0a0b; radius:16px">
+```
+
+### Known Issues (Beta)
+
+- Some computed values need better rounding
+- Transform matrix values included raw
 
 ---
 
-## Phase 4 🎬 Animation Telemetry (MotionSampler)
+## Phase 4 ✅ Animation Telemetry / MotionSampler (Beta)
 
 **Duration:** 2-3 weeks  
-**Priority:** P2
+**Priority:** P2  
+**Status:** ✅ Complete — Beta Testing (27.12.2024)
 
 ### Goal
 
 Record animations via `requestAnimationFrame` and generate Framer Motion code.
 
-### Tasks
+### Completed Tasks
 
 ```markdown
-- [ ] Implement `MotionSampler` class
-  - [ ] Start/stop recording
-  - [ ] Capture transform matrix per frame
-  - [ ] Parse `matrix()` and `matrix3d()`
-  - [ ] Calculate velocity between frames
+- [x] Implement `MotionSampler` class
+  - [x] Start/stop recording
+  - [x] Capture transform matrix per frame
+  - [x] Parse `matrix()` and `matrix3d()`
+  - [x] Calculate velocity between frames
+  - [x] Auto-stop when animation settles
+  - [x] Frame deduplication and optimization
   
-- [ ] Implement easing detection
-  - [ ] Detect overshoot (spring-like)
-  - [ ] Detect linear motion
-  - [ ] Detect ease-in/ease-out
+- [x] Implement easing detection
+  - [x] Detect overshoot (spring-like)
+  - [x] Detect linear motion
+  - [x] Detect ease-in/ease-out
+  - [x] Estimate spring parameters (stiffness, damping, mass)
   
-- [ ] Create trigger detection
-  - [ ] Hover detection (mouseenter/mouseleave)
-  - [ ] Scroll detection (IntersectionObserver)
-  - [ ] Click detection
+- [x] Create trigger detection
+  - [x] Hover detection (mouseenter/mouseleave)
+  - [x] Scroll detection (IntersectionObserver)
+  - [x] Click/focus detection
+  - [x] Custom cursor detection
+  - [x] Find animated elements in DOM
   
-- [ ] Output Framer Motion JSON
-  - [ ] Generate `initial`, `animate`, `transition` props
-  - [ ] Include spring physics parameters
+- [x] Output Framer Motion JSON
+  - [x] Generate `initial`, `animate`, `transition` props
+  - [x] Include spring physics parameters
+  - [x] Generate whileHover/whileInView props
+  - [x] Generate TSX component code
+  - [x] Create compact JSON for data-motion attribute
+  
+- [x] UI Integration
+  - [x] Include Motion toggle in popup (🎬)
+  - [x] Pass includeMotion to content script
+  - [x] Add motion.json to ZIP
+  - [x] Add data-motion attributes to HTML
 ```
 
-### Files to Create
+### Created Files
 
 | File | Purpose |
 |------|---------|
-| `modules/MotionSampler.ts` | Animation recording |
+| `modules/MotionSampler.ts` | Animation recording engine |
 | `utils/matrixParser.ts` | Transform matrix parsing |
 | `utils/easingDetector.ts` | Easing curve analysis |
+| `utils/triggerDetector.ts` | Animation trigger detection |
+| `utils/framerMotionGenerator.ts` | Framer Motion code generation |
+
+### Output Example
+
+**motion.json:**
+```json
+{
+  "version": "1.0",
+  "animations": {
+    "div:nth-of-type(2)": {
+      "trigger": "load",
+      "easing": "spring",
+      "duration": 815,
+      "props": {
+        "initial": { "x": 837, "y": 484 },
+        "animate": { "x": 883, "y": 472 },
+        "transition": { "type": "spring", "stiffness": 50, "damping": 5 }
+      },
+      "code": "export function AnimatedDiv() { ... }"
+    }
+  }
+}
+```
+
+### Known Issues (Beta)
+
+- **Scroll-triggered animations**: Must manually scroll to trigger before capture
+- **Load animations**: Captures only what's animating at capture moment
+- Limited to 10 elements per capture (performance limit)
 
 ---
 
-## Phase 5 🤖 AI Integration
+## Phase 5 🔜 AI Integration (Planned)
 
 **Duration:** 1 week  
-**Priority:** P2
+**Priority:** P2  
+**Status:** Next
 
 ### Goal
 
@@ -191,6 +253,11 @@ Connect to OpenRouter API for smart HTML cleanup and Tailwind generation.
   - [ ] API key input
   - [ ] Model selection dropdown
   - [ ] Temperature/token controls
+  
+- [ ] CSS Optimization
+  - [ ] Deduplicate CSS rules
+  - [ ] Remove unused styles
+  - [ ] Minify output
 ```
 
 ### Files to Create
@@ -199,6 +266,7 @@ Connect to OpenRouter API for smart HTML cleanup and Tailwind generation.
 |------|---------|
 | `modules/AIClient.ts` | OpenRouter API wrapper |
 | `utils/promptBuilder.ts` | Template generation |
+| `utils/cssOptimizer.ts` | CSS deduplication/minification |
 | `entrypoints/options/` | Settings page |
 
 ---
@@ -207,11 +275,11 @@ Connect to OpenRouter API for smart HTML cleanup and Tailwind generation.
 
 | Phase | Focus | Priority | Status |
 |-------|-------|----------|--------|
-| 1 | Foundation | P0 | ✅ Complete |
-| 2 | Asset Manager | P0 | ✅ Complete |
-| 3 | StyleHydrator | P1 | 🔜 Next |
-| 4 | MotionSampler | P2 | Planned |
-| 5 | AI Integration | P2 | Planned |
+| 1 | Foundation | P0 | ✅ Stable |
+| 2 | Asset Manager | P0 | ✅ Beta |
+| 3 | StyleHydrator | P1 | ✅ Beta |
+| 4 | MotionSampler | P2 | ✅ Beta |
+| 5 | AI Integration | P2 | 🔜 Next |
 
 **Total estimated time:** 6-8 weeks
 
@@ -219,6 +287,18 @@ Connect to OpenRouter API for smart HTML cleanup and Tailwind generation.
 
 ## Current Status
 
-📍 **You are here:** Phase 2 complete, ready for Phase 3
+📍 **You are here:** Phases 1-4 complete, Phases 2-4 in Beta Testing
 
-**Next immediate action:** Implement `StyleHydrator` class in `modules/StyleHydrator.ts`
+**Next immediate action:** Manual testing on various websites, then Phase 5 AI integration
+
+---
+
+## Beta Testing Checklist
+
+Before releasing Phases 2-4 as stable:
+
+- [ ] Test on 10+ different website types (Framer, Webflow, Next.js, vanilla)
+- [ ] Verify font path resolution on CDN fonts
+- [ ] Test motion capture on sites with Framer Motion, GSAP, CSS animations
+- [ ] Validate data-truth output with AI models
+- [ ] Performance testing on large pages (1000+ elements)
